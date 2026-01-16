@@ -1,0 +1,25 @@
+{
+  "BOSS": {
+    "INITIAL_HP": 500,
+    "MAX_HP": 500,
+    "SIZE": 350,
+    "MOVE_SPEED": 0.6,
+    "MOVE_RANGE": {
+      "minX": 100,
+      "maxX": 900,
+      "minY": 150,
+      "maxY": 400
+    },
+    "IMAGE_URL": null
+  },
+  "BULLET": {
+    "SPEED": 0.6,
+    "HEIGHT": 60,
+    "BASE_DAMAGE": 10,
+    "CRITICAL_RATE": 0.15,
+    "CRITICAL_MULTIPLIER": 5
+  },
+  "GAME": {
+    "FPS": 60
+  }
+}
