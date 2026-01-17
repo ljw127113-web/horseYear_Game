@@ -391,64 +391,91 @@
             elements.serverUrl.value = serverUrl;
             
             console.log('正在连接到WebSocket服务器:', serverUrl);
+            console.log('连接协议:', serverUrl.startsWith('wss://') ? 'WSS (安全)' : 'WS (非安全)');
+            console.log('页面协议:', window.location.protocol);
 
             try {
-                ws = new WebSocket(serverUrl);
-
-                ws.onopen = () => {
-                    console.log('已连接到服务器');
-                    isConnected = true;
-                    updateStatus(true);
-                    elements.connectBtn.textContent = '断开连接';
+                // 尝试多个路径（Railway可能需要特定路径）
+                const urlsToTry = [
+                    serverUrl,
+                    serverUrl.replace(/\/$/, '') + '/ws',
+                    serverUrl.replace(/\/$/, '') + '/websocket'
+                ];
+                
+                let urlIndex = 0;
+                let currentUrl = urlsToTry[0];
+                
+                function tryConnect(url) {
+                    console.log(`尝试连接 (${urlIndex + 1}/${urlsToTry.length}):`, url);
+                    ws = new WebSocket(url);
                     
-                    // 发送玩家信息
-                    ws.send(JSON.stringify({
-                        type: 'playerInfo',
-                        playerName: playerInfo.name,
-                        avatarUrl: playerInfo.avatarUrl
-                    }));
-                };
-
-                ws.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        // 玩家端只需要确认连接，不需要处理其他消息
-                    } catch (error) {
-                        console.error('消息解析错误:', error);
-                    }
-                };
-
-                ws.onerror = (error) => {
-                    console.error('WebSocket错误:', error);
-                    console.error('错误详情:', {
-                        type: error.type,
-                        target: error.target,
-                        readyState: ws.readyState,
-                        url: serverUrl
-                    });
+                    ws.onopen = () => {
+                        console.log(`✅ 连接成功! 使用URL: ${url}`);
+                        isConnected = true;
+                        updateStatus(true);
+                        elements.connectBtn.textContent = '断开连接';
+                        
+                        // 发送玩家信息
+                        ws.send(JSON.stringify({
+                            type: 'playerInfo',
+                            playerName: playerInfo.name,
+                            avatarUrl: playerInfo.avatarUrl
+                        }));
+                    };
                     
-                    // 提供更详细的错误信息
-                    let errorMsg = '连接失败';
-                    if (ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED) {
-                        errorMsg = '连接已关闭（代码1006通常表示服务器未响应或拒绝连接）';
-                        console.error('可能的原因：');
-                        console.error('1. Railway服务器未运行或已停止');
-                        console.error('2. 服务器地址不正确');
-                        console.error('3. Railway网络配置问题');
-                        console.error('4. WebSocket协议不被支持');
-                    }
+                    ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            console.log('收到消息:', data);
+                            // 玩家端只需要确认连接，不需要处理其他消息
+                        } catch (error) {
+                            console.error('消息解析错误:', error);
+                        }
+                    };
                     
-                    updateStatus(false);
-                    alert(`连接失败：${errorMsg}\n\n请检查：\n1. Railway服务是否运行\n2. 服务器地址是否正确\n3. Railway网络设置`);
-                };
-
-                ws.onclose = () => {
-                    console.log('与服务器断开连接');
-                    isConnected = false;
-                    updateStatus(false);
-                    elements.connectBtn.textContent = '连接服务器';
-                    ws = null;
-                };
+                    ws.onerror = (error) => {
+                        console.error(`❌ WebSocket错误 (尝试 ${urlIndex + 1}):`, error);
+                        console.error('错误详情:', {
+                            type: error.type,
+                            target: error.target,
+                            readyState: ws.readyState,
+                            url: url
+                        });
+                        
+                        // 如果还有其他URL可以尝试
+                        if (urlIndex < urlsToTry.length - 1) {
+                            urlIndex++;
+                            console.log(`尝试下一个URL...`);
+                            setTimeout(() => {
+                                tryConnect(urlsToTry[urlIndex]);
+                            }, 1000);
+                        } else {
+                            // 所有URL都失败了
+                            let errorMsg = '连接失败：所有尝试的URL都失败了';
+                            console.error('可能的原因：');
+                            console.error('1. Railway服务器未运行或已停止');
+                            console.error('2. 服务器地址不正确');
+                            console.error('3. Railway网络配置问题');
+                            console.error('4. WebSocket协议不被支持');
+                            console.error('5. Railway可能需要特定的WebSocket路径配置');
+                            
+                            updateStatus(false);
+                            alert(`连接失败：${errorMsg}\n\n已尝试的URL：\n${urlsToTry.join('\n')}\n\n请检查：\n1. Railway服务是否运行\n2. Railway日志中的错误信息\n3. 考虑切换到Render服务`);
+                        }
+                    };
+                    
+                    ws.onclose = (event) => {
+                        console.log(`连接关闭 - Code: ${event.code}, Reason: ${event.reason || '无'}, WasClean: ${event.wasClean}`);
+                        if (ws.readyState === WebSocket.CLOSED && urlIndex >= urlsToTry.length - 1) {
+                            isConnected = false;
+                            updateStatus(false);
+                            elements.connectBtn.textContent = '连接服务器';
+                            ws = null;
+                        }
+                    };
+                }
+                
+                tryConnect(currentUrl);
             } catch (error) {
                 alert('连接失败：' + error.message);
                 updateStatus(false);
@@ -492,6 +519,9 @@
                 return;
             }
 
+            // 生成弹幕ID
+            const bulletId = Date.now() + Math.random();
+            
             // 发送弹幕到服务器
             ws.send(JSON.stringify({
                 type: 'bullet',
@@ -499,7 +529,8 @@
                     name: playerInfo.name,
                     avatarUrl: playerInfo.avatarUrl
                 },
-                text: text
+                text: text,
+                id: bulletId  // 添加ID用于去重
             }));
 
             // 清空输入框

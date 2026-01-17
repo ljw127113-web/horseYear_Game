@@ -1513,7 +1513,12 @@ function connectWebSocket() {
                     case 'bullet':
                         // 接收弹幕（使用ID去重，避免重复添加）
                         // 主游戏端接收所有弹幕，通过ID和内容去重防止重复显示
-                        if (data.player && data.text && data.id) {
+                        if (data.player && data.text) {
+                            // 如果没有id，生成一个（兼容旧数据）
+                            if (!data.id) {
+                                data.id = Date.now() + Math.random();
+                                console.log('⚠️ 弹幕缺少ID，已生成:', data.id);
+                            }
                             receiveBulletFromPlayer(data);
                         } else {
                             console.warn('⚠️ 收到的弹幕数据不完整:', data);
