@@ -420,7 +420,26 @@
 
                 ws.onerror = (error) => {
                     console.error('WebSocket错误:', error);
+                    console.error('错误详情:', {
+                        type: error.type,
+                        target: error.target,
+                        readyState: ws.readyState,
+                        url: serverUrl
+                    });
+                    
+                    // 提供更详细的错误信息
+                    let errorMsg = '连接失败';
+                    if (ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED) {
+                        errorMsg = '连接已关闭（代码1006通常表示服务器未响应或拒绝连接）';
+                        console.error('可能的原因：');
+                        console.error('1. Railway服务器未运行或已停止');
+                        console.error('2. 服务器地址不正确');
+                        console.error('3. Railway网络配置问题');
+                        console.error('4. WebSocket协议不被支持');
+                    }
+                    
                     updateStatus(false);
+                    alert(`连接失败：${errorMsg}\n\n请检查：\n1. Railway服务是否运行\n2. 服务器地址是否正确\n3. Railway网络设置`);
                 };
 
                 ws.onclose = () => {
