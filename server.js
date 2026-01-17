@@ -11,25 +11,60 @@ let gameState = null;
 
 // 创建HTTP服务器（处理健康检查和WebSocket升级）
 const server = http.createServer((req, res) => {
+    const url = require('url');
+    const parsedUrl = url.parse(req.url || '/', true);
+    const pathname = parsedUrl.pathname || '/';
+    
+    // 调试日志
+    console.log(`📥 HTTP请求: ${req.method} ${pathname} (原始URL: ${req.url})`);
+
     // 处理健康检查请求（Railway需要）
-    if (req.url === '/' || req.url === '/health') {
-        res.writeHead(200, { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-        });
-        res.end(JSON.stringify({ 
+    if (pathname === '/' || pathname === '/health') {
+        const response = {
             status: 'ok', 
             service: 'danmaku-boss-websocket',
             port: PORT,
             clients: clients.size,
-            timestamp: new Date().toISOString()
-        }));
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime()
+        };
+        
+        res.writeHead(200, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type'
+        });
+        res.end(JSON.stringify(response));
+        console.log(`✅ 健康检查响应: 200 OK - ${JSON.stringify(response)}`);
+        return;
+    }
+
+    // 处理OPTIONS请求（CORS预检）
+    if (req.method === 'OPTIONS') {
+        res.writeHead(200, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type'
+        });
+        res.end();
         return;
     }
     
     // 其他HTTP请求返回404
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('Not Found');
+    const errorResponse = {
+        error: 'Not Found',
+        path: pathname,
+        message: 'This endpoint does not exist. Use /health for health check.',
+        availableEndpoints: ['/', '/health']
+    };
+    
+    res.writeHead(404, { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+    });
+    res.end(JSON.stringify(errorResponse));
+    console.log(`❌ 404错误: ${pathname}`);
 });
 
 // 创建WebSocket服务器
@@ -44,13 +79,22 @@ const wss = new WebSocket.Server({
 });
 
 // 启动服务器（必须监听0.0.0.0，Railway要求）
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', (err) => {
+    if (err) {
+        console.error('❌ 服务器启动失败:', err);
+        process.exit(1);
+    }
     console.log(`✅ WebSocket服务器启动成功`);
     console.log(`   端口: ${PORT}`);
     console.log(`   监听地址: 0.0.0.0:${PORT}`);
     console.log(`   环境: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`   WebSocket地址: wss://your-domain:${PORT}`);
-    console.log(`   健康检查: http://your-domain:${PORT}/health`);
+    console.log(`   HTTP健康检查: http://0.0.0.0:${PORT}/health`);
+    console.log(`   WebSocket端点: ws://0.0.0.0:${PORT}`);
+});
+
+// 处理服务器错误
+server.on('error', (error) => {
+    console.error('❌ HTTP服务器错误:', error);
 });
 
 wss.on('connection', (ws, req) => {
