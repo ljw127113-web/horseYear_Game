@@ -246,10 +246,6 @@ const elements = {
     playerSetup: document.getElementById('playerSetup'),
     gameArea: document.getElementById('gameArea'),
     killerDisplay: document.getElementById('killerDisplay'),
-    avatarInput: document.getElementById('avatarInput'),
-    avatarPreview: document.getElementById('avatarPreview'),
-    uploadBtn: document.getElementById('uploadBtn'),
-    playerName: document.getElementById('playerName'),
     confirmSetup: document.getElementById('confirmSetup'),
     currentPlayerAvatar: document.getElementById('currentPlayerAvatar'),
     currentPlayerName: document.getElementById('currentPlayerName'),
@@ -360,41 +356,67 @@ function initCanvas() {
     }, { passive: false });
 }
 
-// 玩家设置相关
-elements.uploadBtn.addEventListener('click', () => {
-    elements.avatarInput.click();
+// 页面加载时尝试连接WebSocket（显示连接状态）
+window.addEventListener('load', () => {
+    // 延迟连接，给页面渲染时间
+    setTimeout(() => {
+        const serverUrl = getWebSocketUrl();
+        if (serverUrl) {
+            updateServerStatus(false, '正在连接...');
+            // 先尝试连接以显示状态（但不完全初始化，等点击开始游戏后再正式连接）
+            try {
+                const testWs = new WebSocket(serverUrl);
+                testWs.onopen = () => {
+                    updateServerStatus(true, '服务器连接正常');
+                    testWs.close(); // 关闭测试连接
+                };
+                testWs.onerror = () => {
+                    updateServerStatus(false, '无法连接到服务器');
+                };
+                testWs.onclose = () => {
+                    // 测试连接关闭，不影响状态显示
+                };
+            } catch (error) {
+                updateServerStatus(false, '连接失败：' + error.message);
+            }
+        } else {
+            updateServerStatus(false, '服务器地址未配置');
+        }
+    }, 500);
 });
 
-elements.avatarInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            gameState.player.avatarUrl = event.target.result;
-            elements.avatarPreview.src = event.target.result;
-            elements.avatarPreview.style.display = 'block';
-            document.querySelector('.avatar-placeholder').style.display = 'none';
-            checkSetupComplete();
-        };
-        reader.readAsDataURL(file);
+// 更新服务器连接状态显示
+function updateServerStatus(connected, detail = '') {
+    const statusEl = document.getElementById('serverStatus');
+    const detailEl = document.getElementById('serverStatusDetail');
+    
+    if (connected) {
+        statusEl.textContent = '已连接';
+        statusEl.className = 'status-indicator status-connected';
+        if (detail) {
+            detailEl.textContent = detail;
+            detailEl.style.display = 'block';
+        }
+    } else {
+        statusEl.textContent = '未连接';
+        statusEl.className = 'status-indicator status-disconnected';
+        if (detail) {
+            detailEl.textContent = detail;
+            detailEl.style.display = 'block';
+        }
     }
-});
-
-elements.playerName.addEventListener('input', () => {
-    checkSetupComplete();
-});
-
-function checkSetupComplete() {
-    const hasAvatar = gameState.player.avatarUrl !== '';
-    const hasName = elements.playerName.value.trim() !== '';
-    elements.confirmSetup.disabled = !(hasAvatar && hasName);
 }
 
 elements.confirmSetup.addEventListener('click', () => {
-    gameState.player.name = elements.playerName.value.trim();
-    gameState.player.avatar = elements.avatarPreview.src;
-    elements.currentPlayerAvatar.src = gameState.player.avatarUrl;
-    elements.currentPlayerName.textContent = gameState.player.name;
+    // 生成默认玩家信息（主游戏端不需要玩家信息，只观看）
+    gameState.player.name = '观众';
+    gameState.player.avatarUrl = '';
+    gameState.player.avatar = '';
+    
+    // 设置显示信息
+    elements.currentPlayerAvatar.src = '';
+    elements.currentPlayerAvatar.style.display = 'none';
+    elements.currentPlayerName.textContent = '观众模式';
     
     elements.playerSetup.style.display = 'none';
     elements.gameArea.style.display = 'block';
@@ -1441,10 +1463,12 @@ function connectWebSocket() {
         console.warn('⚠️ WebSocket服务器地址未配置');
         console.warn('请通过URL参数指定服务器地址，例如：?ws=wss://your-server.railway.app');
         console.warn('或者在代码中配置生产环境服务器地址');
+        updateServerStatus(false, '服务器地址未配置');
         return; // 不连接，游戏将在单机模式下运行
     }
     
     console.log('正在连接到WebSocket服务器:', serverUrl);
+    updateServerStatus(false, '正在连接...');
     
     try {
         ws = new WebSocket(serverUrl);
@@ -1510,11 +1534,13 @@ function connectWebSocket() {
         ws.onerror = (error) => {
             console.error('WebSocket错误:', error);
             wsConnected = false;
+            updateServerStatus(false, '连接失败，请检查服务器地址');
         };
         
         ws.onclose = () => {
             console.log('WebSocket连接已关闭');
             wsConnected = false;
+            updateServerStatus(false, '连接已断开');
             // 尝试重连（可选）
             // setTimeout(connectWebSocket, 3000);
         };

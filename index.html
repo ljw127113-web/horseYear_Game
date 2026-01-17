@@ -11,24 +11,21 @@
 </head>
 <body>
     <div class="game-container">
-        <!-- 玩家设置面板 -->
+        <!-- 开始游戏面板 -->
         <div id="playerSetup" class="setup-panel">
-            <h2>玩家设置</h2>
+            <h2>弹幕BOSS战</h2>
             <div class="setup-content">
-                <div class="avatar-section">
-                    <label>上传头像：</label>
-                    <div class="avatar-preview">
-                        <img id="avatarPreview" src="" alt="头像预览" style="display: none;">
-                        <div class="avatar-placeholder">点击上传</div>
+                <div class="connection-status-section">
+                    <div class="status-item">
+                        <span class="status-label">服务器状态：</span>
+                        <span id="serverStatus" class="status-indicator">连接中...</span>
                     </div>
-                    <input type="file" id="avatarInput" accept="image/*" style="display: none;">
-                    <button id="uploadBtn" class="btn">选择头像</button>
+                    <div id="serverStatusDetail" class="status-detail" style="display: none;"></div>
                 </div>
-                <div class="name-section">
-                    <label>玩家名字：</label>
-                    <input type="text" id="playerName" placeholder="请输入你的名字" maxlength="20">
+                <div class="start-game-section">
+                    <p class="game-description">观看其他玩家发送弹幕攻击BOSS</p>
+                    <button id="confirmSetup" class="btn btn-primary btn-large">开始游戏</button>
                 </div>
-                <button id="confirmSetup" class="btn btn-primary" disabled>确认设置</button>
             </div>
         </div>
 
