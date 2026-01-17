@@ -24,6 +24,39 @@ const DEFAULT_CONFIG = {
 // 游戏配置（可动态修改）
 let CONFIG = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 
+// ============ WebSocket多玩家支持 ============
+let ws = null;
+let wsConnected = false;
+
+// WebSocket服务器地址配置
+// 优先级：URL参数 > 环境变量 > 默认值
+function getWebSocketUrl() {
+    // 1. 优先使用URL参数
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlParam = urlParams.get('ws');
+    if (urlParam) {
+        return urlParam;
+    }
+    
+    // 2. 使用环境变量（如果在构建时设置）
+    if (typeof WS_SERVER_URL !== 'undefined' && WS_SERVER_URL) {
+        return WS_SERVER_URL;
+    }
+    
+    // 3. 检查是否为生产环境（Netlify）
+    const hostname = window.location.hostname;
+    if (hostname.includes('netlify.app') || hostname !== 'localhost' && hostname !== '127.0.0.1') {
+        // 生产环境默认地址（需要替换为实际的服务器地址）
+        // 例如：'wss://your-server.railway.app'
+        return null; // 返回null表示未配置，将提示用户
+    }
+    
+    // 4. 开发环境默认地址
+    return 'ws://localhost:8080';
+}
+
+const WS_SERVER_URL = getWebSocketUrl();
+
 // 从配置文件加载默认设置
 let loadedDefaultConfig = null;
 
@@ -368,6 +401,11 @@ elements.confirmSetup.addEventListener('click', () => {
     
     initCanvas();
     startGame();
+    
+    // 连接WebSocket服务器（延迟连接，确保游戏已初始化）
+    setTimeout(() => {
+        connectWebSocket();
+    }, 500);
 });
 
 // 发送弹幕（移动端优化）
@@ -411,8 +449,41 @@ function sendBullet() {
         height: CONFIG.BULLET.HEIGHT
     };
     
+    // 添加到本地弹幕列表
     gameState.bullets.push(bullet);
+    
+    // 通过WebSocket发送给服务器（广播给其他玩家）
+    if (wsConnected && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: 'bullet',
+            player: bullet.player,
+            text: bullet.text,
+            id: bullet.id
+        }));
+    }
+    
     elements.bulletInput.value = '';
+}
+
+// 接收其他玩家的弹幕
+function receiveBulletFromPlayer(data) {
+    if (!data.player || !data.text) return;
+    
+    const bullet = {
+        id: data.id || Date.now() + Math.random(),
+        player: {
+            name: data.player.name,
+            avatarUrl: data.player.avatarUrl || ''
+        },
+        text: data.text,
+        x: elements.gameCanvas.width + 100, // 从右侧开始（向左移动）
+        y: Math.random() * (elements.gameCanvas.height - 200) + 100,
+        width: 0, // 将在绘制时计算
+        height: CONFIG.BULLET.HEIGHT
+    };
+    
+    gameState.bullets.push(bullet);
+    console.log(`收到玩家 ${data.player.name} 的弹幕: ${data.text}`);
 }
 
 // BOSS移动
@@ -1351,6 +1422,112 @@ if (elements.clearStatsBtn) {
 // 加载版本号
 loadVersionFromFile().then(() => {
     console.log('版本号加载完成');
+});
+
+// ============ WebSocket连接 ============
+function connectWebSocket() {
+    const serverUrl = getWebSocketUrl();
+    
+    if (!serverUrl) {
+        console.warn('⚠️ WebSocket服务器地址未配置');
+        console.warn('请通过URL参数指定服务器地址，例如：?ws=wss://your-server.railway.app');
+        console.warn('或者在代码中配置生产环境服务器地址');
+        return; // 不连接，游戏将在单机模式下运行
+    }
+    
+    console.log('正在连接到WebSocket服务器:', serverUrl);
+    
+    try {
+        ws = new WebSocket(serverUrl);
+        
+        ws.onopen = () => {
+            console.log('已连接到WebSocket服务器');
+            wsConnected = true;
+            
+            // 发送玩家信息
+            if (gameState.player.name) {
+                ws.send(JSON.stringify({
+                    type: 'playerInfo',
+                    playerName: gameState.player.name,
+                    avatarUrl: gameState.player.avatarUrl
+                }));
+            }
+        };
+        
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                
+                switch (data.type) {
+                    case 'bullet':
+                        // 接收其他玩家的弹幕（不处理自己发送的）
+                        if (data.player && data.player.name !== gameState.player.name) {
+                            receiveBulletFromPlayer(data);
+                        }
+                        break;
+                        
+                    case 'damage':
+                        // 接收其他玩家造成的伤害（仅显示日志，不重复计算）
+                        if (data.player && data.player.name !== gameState.player.name) {
+                            addBattleLog(data.player.name, data.damage, data.isCritical);
+                            // 同步BOSS血量（如果不同）
+                            if (data.bossHP !== undefined && data.bossHP < gameState.boss.hp) {
+                                gameState.boss.hp = data.bossHP;
+                            }
+                        }
+                        break;
+                        
+                    case 'bossState':
+                        // 接收BOSS状态更新（如果需要）
+                        if (data.boss) {
+                            gameState.boss.x = data.boss.x || gameState.boss.x;
+                            gameState.boss.y = data.boss.y || gameState.boss.y;
+                        }
+                        break;
+                        
+                    case 'gameReset':
+                        // 游戏重置
+                        if (confirm('其他玩家已重置游戏，是否同步？')) {
+                            location.reload();
+                        }
+                        break;
+                }
+            } catch (error) {
+                console.error('消息解析错误:', error);
+            }
+        };
+        
+        ws.onerror = (error) => {
+            console.error('WebSocket错误:', error);
+            wsConnected = false;
+        };
+        
+        ws.onclose = () => {
+            console.log('WebSocket连接已关闭');
+            wsConnected = false;
+            // 尝试重连（可选）
+            // setTimeout(connectWebSocket, 3000);
+        };
+    } catch (error) {
+        console.warn('WebSocket连接失败:', error.message);
+        console.warn('游戏将在单机模式下运行');
+    }
+}
+
+// 启动游戏时连接WebSocket（延迟连接，等待玩家设置完成）
+elements.confirmSetup.addEventListener('click', () => {
+    // 原有的设置代码...
+    // 然后连接WebSocket
+    setTimeout(() => {
+        connectWebSocket();
+    }, 500);
+}, { once: false });
+
+// 页面卸载时断开连接
+window.addEventListener('beforeunload', () => {
+    if (ws) {
+        ws.close();
+    }
 });
 
 // 初始化Canvas

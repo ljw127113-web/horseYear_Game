@@ -1,0 +1,20 @@
+{
+  "name": "danmaku-boss-game",
+  "version": "1.0.0",
+  "description": "弹幕BOSS战 - 多玩家实时同步游戏",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "game",
+    "websocket",
+    "multiplayer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.14.2"
+  }
+}

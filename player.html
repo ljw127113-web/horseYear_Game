@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>弹幕BOSS战 - 玩家端</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .player-container {
+            width: 100%;
+            max-width: 600px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        .player-setup {
+            margin-bottom: 30px;
+        }
+
+        .setup-item {
+            margin-bottom: 20px;
+        }
+
+        .setup-item label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: bold;
+        }
+
+        .avatar-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .avatar-preview {
+            width: 100px;
+            height: 100px;
+            border: 3px dashed #ccc;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: #f5f5f5;
+            cursor: pointer;
+        }
+
+        .avatar-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+
+        .avatar-placeholder {
+            color: #999;
+            font-size: 14px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .bullet-input-section {
+            margin-top: 30px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .input-group input {
+            flex: 1;
+            font-size: 16px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            min-height: 44px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .connection-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .player-container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="player-container">
+        <h1>🎮 弹幕BOSS战 - 玩家端</h1>
+        
+        <!-- 玩家设置 -->
+        <div class="player-setup" id="playerSetup">
+            <div class="setup-item">
+                <label>上传头像：</label>
+                <div class="avatar-section">
+                    <div class="avatar-preview" id="avatarPreview">
+                        <img id="avatarImg" src="" alt="头像">
+                        <div class="avatar-placeholder">点击上传</div>
+                    </div>
+                    <input type="file" id="avatarInput" accept="image/*">
+                    <button class="btn" id="uploadBtn">选择头像</button>
+                </div>
+            </div>
+            <div class="setup-item">
+                <label>玩家名字：</label>
+                <input type="text" id="playerName" placeholder="请输入你的名字" maxlength="20">
+            </div>
+            <button class="btn btn-primary" id="confirmSetup" disabled>确认设置</button>
+        </div>
+
+        <!-- 连接状态 -->
+        <div class="status disconnected" id="status">
+            ⚠️ 未连接服务器
+        </div>
+
+        <!-- 弹幕输入 -->
+        <div class="bullet-input-section" id="bulletSection" style="display: none;">
+            <div class="input-group">
+                <input type="text" id="bulletInput" placeholder="输入弹幕内容..." maxlength="50">
+                <button class="btn btn-primary" id="sendBtn">发送</button>
+            </div>
+            <div class="connection-info">
+                <strong>服务器地址：</strong>
+                <input type="text" id="serverUrl" value="ws://localhost:8080" style="width: 100%; margin-top: 5px; padding: 8px;">
+                <button class="btn" id="connectBtn" style="width: 100%; margin-top: 10px;">连接服务器</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let playerInfo = {
+            name: '',
+            avatarUrl: ''
+        };
+        let isConnected = false;
+
+        // DOM元素
+        const elements = {
+            playerSetup: document.getElementById('playerSetup'),
+            avatarPreview: document.getElementById('avatarPreview'),
+            avatarImg: document.getElementById('avatarImg'),
+            avatarInput: document.getElementById('avatarInput'),
+            uploadBtn: document.getElementById('uploadBtn'),
+            playerName: document.getElementById('playerName'),
+            confirmSetup: document.getElementById('confirmSetup'),
+            status: document.getElementById('status'),
+            bulletSection: document.getElementById('bulletSection'),
+            bulletInput: document.getElementById('bulletInput'),
+            sendBtn: document.getElementById('sendBtn'),
+            serverUrl: document.getElementById('serverUrl'),
+            connectBtn: document.getElementById('connectBtn')
+        };
+
+        // 头像上传
+        elements.uploadBtn.addEventListener('click', () => {
+            elements.avatarInput.click();
+        });
+
+        elements.avatarInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    playerInfo.avatarUrl = event.target.result;
+                    elements.avatarImg.src = event.target.result;
+                    elements.avatarImg.style.display = 'block';
+                    document.querySelector('.avatar-placeholder').style.display = 'none';
+                    checkSetupComplete();
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        elements.playerName.addEventListener('input', () => {
+            checkSetupComplete();
+        });
+
+        function checkSetupComplete() {
+            const hasAvatar = playerInfo.avatarUrl !== '';
+            const hasName = elements.playerName.value.trim() !== '';
+            elements.confirmSetup.disabled = !(hasAvatar && hasName);
+        }
+
+        // 确认设置
+        elements.confirmSetup.addEventListener('click', () => {
+            playerInfo.name = elements.playerName.value.trim();
+            elements.playerSetup.style.display = 'none';
+            elements.bulletSection.style.display = 'block';
+            
+            // 自动连接服务器
+            connectToServer();
+        });
+
+        // 连接服务器
+        elements.connectBtn.addEventListener('click', () => {
+            if (isConnected) {
+                disconnectFromServer();
+            } else {
+                connectToServer();
+            }
+        });
+
+        function connectToServer() {
+            const serverUrl = elements.serverUrl.value.trim();
+            if (!serverUrl) {
+                alert('请输入服务器地址！');
+                return;
+            }
+
+            try {
+                ws = new WebSocket(serverUrl);
+
+                ws.onopen = () => {
+                    console.log('已连接到服务器');
+                    isConnected = true;
+                    updateStatus(true);
+                    elements.connectBtn.textContent = '断开连接';
+                    
+                    // 发送玩家信息
+                    ws.send(JSON.stringify({
+                        type: 'playerInfo',
+                        playerName: playerInfo.name,
+                        avatarUrl: playerInfo.avatarUrl
+                    }));
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        // 玩家端只需要确认连接，不需要处理其他消息
+                    } catch (error) {
+                        console.error('消息解析错误:', error);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket错误:', error);
+                    updateStatus(false);
+                };
+
+                ws.onclose = () => {
+                    console.log('与服务器断开连接');
+                    isConnected = false;
+                    updateStatus(false);
+                    elements.connectBtn.textContent = '连接服务器';
+                    ws = null;
+                };
+            } catch (error) {
+                alert('连接失败：' + error.message);
+                updateStatus(false);
+            }
+        }
+
+        function disconnectFromServer() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function updateStatus(connected) {
+            if (connected) {
+                elements.status.className = 'status connected';
+                elements.status.textContent = '✅ 已连接到服务器';
+            } else {
+                elements.status.className = 'status disconnected';
+                elements.status.textContent = '⚠️ 未连接服务器';
+            }
+        }
+
+        // 发送弹幕
+        elements.sendBtn.addEventListener('click', sendBullet);
+        elements.bulletInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendBullet();
+            }
+        });
+
+        function sendBullet() {
+            const text = elements.bulletInput.value.trim();
+            if (!text) {
+                alert('请输入弹幕内容！');
+                return;
+            }
+
+            if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN) {
+                alert('请先连接到服务器！');
+                return;
+            }
+
+            // 发送弹幕到服务器
+            ws.send(JSON.stringify({
+                type: 'bullet',
+                player: {
+                    name: playerInfo.name,
+                    avatarUrl: playerInfo.avatarUrl
+                },
+                text: text
+            }));
+
+            // 清空输入框
+            elements.bulletInput.value = '';
+            
+            // 自动聚焦
+            setTimeout(() => {
+                elements.bulletInput.focus();
+            }, 100);
+        }
+
+        // 页面卸载时断开连接
+        window.addEventListener('beforeunload', () => {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>
