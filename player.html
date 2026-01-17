@@ -221,7 +221,7 @@
             </div>
             <div class="connection-info">
                 <strong>服务器地址：</strong>
-                <input type="text" id="serverUrl" value="ws://localhost:8080" style="width: 100%; margin-top: 5px; padding: 8px;">
+                <input type="text" id="serverUrl" style="width: 100%; margin-top: 5px; padding: 8px;" placeholder="wss://your-server.railway.app">
                 <button class="btn" id="connectBtn" style="width: 100%; margin-top: 10px;">连接服务器</button>
             </div>
         </div>
@@ -251,6 +251,45 @@
             serverUrl: document.getElementById('serverUrl'),
             connectBtn: document.getElementById('connectBtn')
         };
+
+        // 从URL参数读取WebSocket服务器地址
+        function getWebSocketUrlFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const wsParam = urlParams.get('ws');
+            if (wsParam) {
+                // 确保URL格式正确
+                let url = wsParam.trim();
+                // 如果URL包含协议，直接返回
+                if (url.startsWith('ws://') || url.startsWith('wss://')) {
+                    return url;
+                }
+                // 否则添加wss://前缀（生产环境默认使用安全连接）
+                return 'wss://' + url;
+            }
+            return null;
+        }
+
+        // 初始化服务器地址
+        function initServerUrl() {
+            const urlFromParam = getWebSocketUrlFromUrl();
+            if (urlFromParam) {
+                elements.serverUrl.value = urlFromParam;
+                console.log('从URL参数读取服务器地址:', urlFromParam);
+            } else {
+                // 检查是否为生产环境
+                const hostname = window.location.hostname;
+                if (hostname.includes('netlify.app') || (hostname !== 'localhost' && hostname !== '127.0.0.1')) {
+                    // 生产环境但没有URL参数，提示用户
+                    elements.serverUrl.placeholder = '请输入WebSocket服务器地址（如：wss://your-server.railway.app）';
+                } else {
+                    // 开发环境默认值
+                    elements.serverUrl.value = 'ws://localhost:8080';
+                }
+            }
+        }
+
+        // 页面加载时初始化
+        initServerUrl();
 
         // 头像上传
         elements.uploadBtn.addEventListener('click', () => {
@@ -302,11 +341,28 @@
         });
 
         function connectToServer() {
-            const serverUrl = elements.serverUrl.value.trim();
+            // 优先使用输入框的值，如果没有则尝试从URL参数读取
+            let serverUrl = elements.serverUrl.value.trim();
+            
             if (!serverUrl) {
-                alert('请输入服务器地址！');
+                // 尝试从URL参数读取
+                const urlFromParam = getWebSocketUrlFromUrl();
+                if (urlFromParam) {
+                    serverUrl = urlFromParam;
+                    elements.serverUrl.value = serverUrl; // 更新输入框
+                } else {
+                    alert('请输入服务器地址！\n\n格式：wss://your-server.railway.app\n\n或通过URL参数传递：?ws=wss://your-server.railway.app');
+                    return;
+                }
+            }
+
+            // 验证URL格式
+            if (!serverUrl.startsWith('ws://') && !serverUrl.startsWith('wss://')) {
+                alert('服务器地址格式错误！\n\n必须以 ws:// 或 wss:// 开头\n\n例如：wss://your-server.railway.app');
                 return;
             }
+
+            console.log('正在连接到WebSocket服务器:', serverUrl);
 
             try {
                 ws = new WebSocket(serverUrl);
