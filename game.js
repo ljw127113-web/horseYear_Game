@@ -500,6 +500,18 @@ function receiveBulletFromPlayer(data) {
         }
     }
     
+    // 额外检查：通过玩家名字+文本+时间戳组合来判断是否重复
+    // 如果同一玩家在短时间内发送相同文本，可能是重复
+    const recentBullet = gameState.bullets.find(b => 
+        b.player.name === data.player.name && 
+        b.text === data.text &&
+        Date.now() - (b.id || 0) < 1000  // 1秒内的相同弹幕视为重复
+    );
+    if (recentBullet) {
+        console.log(`检测到重复弹幕，跳过: ${data.player.name} - ${data.text}`);
+        return;
+    }
+    
     const bullet = {
         id: data.id || Date.now() + Math.random(),
         player: {
@@ -510,11 +522,12 @@ function receiveBulletFromPlayer(data) {
         x: elements.gameCanvas.width + 100, // 从右侧开始（向左移动）
         y: Math.random() * (elements.gameCanvas.height - 200) + 100,
         width: 0, // 将在绘制时计算
-        height: CONFIG.BULLET.HEIGHT
+        height: CONFIG.BULLET.HEIGHT,
+        receivedAt: Date.now()  // 记录接收时间，用于去重
     };
     
     gameState.bullets.push(bullet);
-    console.log(`收到玩家 ${data.player.name} 的弹幕: ${data.text}`);
+    console.log(`收到玩家 ${data.player.name} 的弹幕: ${data.text} (ID: ${bullet.id})`);
 }
 
 // BOSS移动
@@ -666,8 +679,8 @@ function createDamageNumber(x, y, damage, isCritical) {
     gameState.damageNumbers.push({
         x: x + (Math.random() - 0.5) * 60, // 随机位置
         y: y,
-        vx: (Math.random() - 0.5) * 2,
-        vy: -3 - Math.random() * 2, // 向上飞
+        vx: (Math.random() - 0.5) * 1, // 减慢横向速度
+        vy: -1.5 - Math.random() * 0.5, // 减慢向上飞的速度（原来-3~-5，现在-1.5~-2）
         damage: damage,
         life: 120, // 120帧（翻倍）
         maxLife: 120,
@@ -700,7 +713,7 @@ function updateDamageNumbers() {
         
         number.x += number.vx;
         number.y += number.vy;
-        number.vy += 0.15; // 重力效果
+        number.vy += 0.08; // 减慢重力效果（原来0.15，现在0.08）
         number.life--;
         
         if (number.life <= 0) {
@@ -755,9 +768,9 @@ function drawDamageNumbers() {
         ctx.translate(number.x, number.y);
         ctx.scale(scale, scale);
         
-        // 绘制阴影
+        // 绘制阴影（字体增大后阴影也要相应调整）
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.font = number.isCritical ? 'bold 36px Arial' : 'bold 28px Arial';
+        ctx.font = number.isCritical ? 'bold 56px Arial' : 'bold 44px Arial'; // 增大字体（原来36/28，现在56/44）
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(`-${number.damage}`, 2, 2);
@@ -765,14 +778,14 @@ function drawDamageNumbers() {
         // 绘制数字
         if (number.isCritical) {
             // 暴击：金色渐变 + 描边
-            const gradient = ctx.createLinearGradient(-50, 0, 50, 0);
+            const gradient = ctx.createLinearGradient(-70, 0, 70, 0); // 调整渐变范围以适应更大字体
             gradient.addColorStop(0, '#ffd700');
             gradient.addColorStop(0.5, '#ffed4e');
             gradient.addColorStop(1, '#ff6b6b');
             ctx.fillStyle = gradient;
             
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 4; // 增大描边宽度以适应更大字体
             ctx.strokeText(`-${number.damage}`, 0, 0);
         } else {
             // 普通：白色
@@ -781,11 +794,11 @@ function drawDamageNumbers() {
         
         ctx.fillText(`-${number.damage}`, 0, 0);
         
-        // 暴击时添加额外的"CRITICAL!"文字
+        // 暴击时添加额外的"CRITICAL!"文字（也增大字体）
         if (number.isCritical && progress < 0.5) {
             ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 20px Arial';
-            ctx.fillText('CRITICAL!', 0, -30);
+            ctx.font = 'bold 28px Arial'; // 增大字体（原来20，现在28）
+            ctx.fillText('CRITICAL!', 0, -40); // 调整位置以适应更大字体
         }
         
         ctx.restore();
@@ -1476,14 +1489,19 @@ function connectWebSocket() {
         ws.onopen = () => {
             console.log('已连接到WebSocket服务器');
             wsConnected = true;
+            updateServerStatus(true, '已连接到服务器');
             
-            // 发送玩家信息
-            if (gameState.player.name) {
-                ws.send(JSON.stringify({
-                    type: 'playerInfo',
-                    playerName: gameState.player.name,
-                    avatarUrl: gameState.player.avatarUrl
-                }));
+            // 发送玩家信息（确保连接完全ready后再发送）
+            if (gameState.player.name && ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(JSON.stringify({
+                        type: 'playerInfo',
+                        playerName: gameState.player.name,
+                        avatarUrl: gameState.player.avatarUrl
+                    }));
+                } catch (error) {
+                    console.error('发送玩家信息失败:', error);
+                }
             }
         };
         
@@ -1494,9 +1512,11 @@ function connectWebSocket() {
                 switch (data.type) {
                     case 'bullet':
                         // 接收弹幕（使用ID去重，避免重复添加）
-                        // 注意：即使是自己的弹幕，服务器也会广播回来，但通过ID去重不会重复添加
-                        if (data.player && data.text) {
+                        // 主游戏端接收所有弹幕，通过ID和内容去重防止重复显示
+                        if (data.player && data.text && data.id) {
                             receiveBulletFromPlayer(data);
+                        } else {
+                            console.warn('⚠️ 收到的弹幕数据不完整:', data);
                         }
                         break;
                         
