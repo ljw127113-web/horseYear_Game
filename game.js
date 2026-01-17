@@ -469,6 +469,15 @@ function sendBullet() {
 function receiveBulletFromPlayer(data) {
     if (!data.player || !data.text) return;
     
+    // 检查弹幕ID是否已存在，避免重复添加
+    if (data.id) {
+        const existingBullet = gameState.bullets.find(b => b.id === data.id);
+        if (existingBullet) {
+            console.log(`弹幕ID ${data.id} 已存在，跳过重复添加`);
+            return;
+        }
+    }
+    
     const bullet = {
         id: data.id || Date.now() + Math.random(),
         player: {
@@ -1460,8 +1469,9 @@ function connectWebSocket() {
                 
                 switch (data.type) {
                     case 'bullet':
-                        // 接收其他玩家的弹幕（不处理自己发送的）
-                        if (data.player && data.player.name !== gameState.player.name) {
+                        // 接收弹幕（使用ID去重，避免重复添加）
+                        // 注意：即使是自己的弹幕，服务器也会广播回来，但通过ID去重不会重复添加
+                        if (data.player && data.text) {
                             receiveBulletFromPlayer(data);
                         }
                         break;
