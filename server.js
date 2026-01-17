@@ -19,10 +19,19 @@ const clients = new Set();
 let gameState = null;
 
 wss.on('connection', (ws, req) => {
-    const clientId = `${req.socket.remoteAddress}-${Date.now()}`;
-    console.log(`新客户端连接: ${clientId}`);
+    const clientId = `${req.socket.remoteAddress || 'unknown'}-${Date.now()}`;
+    console.log(`✅ 新客户端连接: ${clientId}`);
+    console.log(`   请求URL: ${req.url}`);
+    console.log(`   请求头:`, req.headers);
     
     clients.add(ws);
+    
+    // 发送欢迎消息
+    ws.send(JSON.stringify({
+        type: 'connected',
+        message: 'WebSocket连接成功',
+        clientId: clientId
+    }));
     
     // 发送当前游戏状态给新连接的客户端（如果有）
     if (gameState) {

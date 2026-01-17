@@ -256,15 +256,36 @@
         function getWebSocketUrlFromUrl() {
             const urlParams = new URLSearchParams(window.location.search);
             const wsParam = urlParams.get('ws');
+            console.log('URL参数 ws:', wsParam);
+            console.log('完整URL:', window.location.href);
+            console.log('查询字符串:', window.location.search);
+            
             if (wsParam) {
                 // 确保URL格式正确
-                let url = wsParam.trim();
+                let url = decodeURIComponent(wsParam).trim();
+                console.log('解析后的URL:', url);
+                
+                // 移除可能的斜杠结尾
+                url = url.replace(/\/+$/, '');
+                
                 // 如果URL包含协议，直接返回
                 if (url.startsWith('ws://') || url.startsWith('wss://')) {
+                    console.log('返回WebSocket地址:', url);
                     return url;
                 }
-                // 否则添加wss://前缀（生产环境默认使用安全连接）
-                return 'wss://' + url;
+                
+                // 如果是完整URL（包含http://），需要转换为WebSocket协议
+                if (url.startsWith('http://')) {
+                    url = url.replace('http://', 'ws://');
+                } else if (url.startsWith('https://')) {
+                    url = url.replace('https://', 'wss://');
+                } else {
+                    // 否则添加wss://前缀（生产环境默认使用安全连接）
+                    url = 'wss://' + url;
+                }
+                
+                console.log('最终WebSocket地址:', url);
+                return url;
             }
             return null;
         }
@@ -341,27 +362,34 @@
         });
 
         function connectToServer() {
-            // 优先使用输入框的值，如果没有则尝试从URL参数读取
-            let serverUrl = elements.serverUrl.value.trim();
+            // 优先从URL参数读取
+            let serverUrl = getWebSocketUrlFromUrl();
             
+            // 如果URL参数没有，则使用输入框的值
             if (!serverUrl) {
-                // 尝试从URL参数读取
-                const urlFromParam = getWebSocketUrlFromUrl();
-                if (urlFromParam) {
-                    serverUrl = urlFromParam;
-                    elements.serverUrl.value = serverUrl; // 更新输入框
-                } else {
-                    alert('请输入服务器地址！\n\n格式：wss://your-server.railway.app\n\n或通过URL参数传递：?ws=wss://your-server.railway.app');
-                    return;
-                }
+                serverUrl = elements.serverUrl.value.trim();
             }
-
-            // 验证URL格式
-            if (!serverUrl.startsWith('ws://') && !serverUrl.startsWith('wss://')) {
-                alert('服务器地址格式错误！\n\n必须以 ws:// 或 wss:// 开头\n\n例如：wss://your-server.railway.app');
+            
+            // 如果还是没有，提示用户
+            if (!serverUrl) {
+                alert('请输入服务器地址！\n\n格式：wss://horseyear_game.up.railway.app\n\n或通过URL参数传递：?ws=wss://horseyear_game.up.railway.app');
                 return;
             }
 
+            // 确保URL格式正确
+            serverUrl = serverUrl.trim();
+            // 移除可能的斜杠结尾
+            serverUrl = serverUrl.replace(/\/+$/, '');
+            
+            // 验证URL格式
+            if (!serverUrl.startsWith('ws://') && !serverUrl.startsWith('wss://')) {
+                alert('服务器地址格式错误！\n\n必须以 ws:// 或 wss:// 开头\n\n例如：wss://horseyear_game.up.railway.app\n\n当前值：' + serverUrl);
+                return;
+            }
+
+            // 更新输入框显示
+            elements.serverUrl.value = serverUrl;
+            
             console.log('正在连接到WebSocket服务器:', serverUrl);
 
             try {
