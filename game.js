@@ -14,7 +14,9 @@ const DEFAULT_CONFIG = {
         HEIGHT: 60,             // 从default-config.json同步
         BASE_DAMAGE: 10,        // 从default-config.json同步
         CRITICAL_RATE: 0.15,    // 从default-config.json同步（15%）
-        CRITICAL_MULTIPLIER: 5  // 从default-config.json同步
+        CRITICAL_MULTIPLIER: 5, // 从default-config.json同步
+        MIN_LENGTH: 4,          // 从default-config.json同步（最小长度，单位：汉字）
+        MIN_INTERVAL: 1000      // 从default-config.json同步（最短间隔，单位：毫秒）
     },
     GAME: {
         FPS: 60
@@ -32,6 +34,7 @@ let connectionDurationTimer = null; // 连接时长更新定时器
 let heartbeatTimer = null; // 心跳定时器
 const HEARTBEAT_INTERVAL = 30000; // 心跳间隔30秒（延长连接时间）
 const CONNECTION_TIMEOUT = 120000; // 连接超时时间2分钟（可延长）
+let lastBulletSendTime = 0; // 上次发送弹幕的时间
 
 // WebSocket服务器地址配置
 // 优先级：URL参数 > 环境变量 > 默认值
@@ -282,6 +285,8 @@ const elements = {
     bossSpeed: document.getElementById('bossSpeed'),
     bulletDamage: document.getElementById('bulletDamage'),
     bulletSpeed: document.getElementById('bulletSpeed'),
+    bulletMinLength: document.getElementById('bulletMinLength'),
+    bulletMinInterval: document.getElementById('bulletMinInterval'),
     criticalRate: document.getElementById('criticalRate'),
     criticalMultiplier: document.getElementById('criticalMultiplier'),
     saveConfigBtn: document.getElementById('saveConfigBtn'),
@@ -598,9 +603,40 @@ elements.bulletInput.addEventListener('keypress', (e) => {
     }
 });
 
+// 计算字符串中的中文字符数量
+function countChineseChars(str) {
+    // 匹配中文字符（包括中文标点）
+    const chineseRegex = /[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef]/g;
+    const matches = str.match(chineseRegex);
+    return matches ? matches.length : 0;
+}
+
 function sendBullet() {
     const text = elements.bulletInput.value.trim();
     if (text === '' || gameState.isGameOver) return;
+    
+    // 检查弹幕发送间隔
+    const minInterval = CONFIG.BULLET.MIN_INTERVAL || 1000; // 默认1秒
+    const currentTime = Date.now();
+    const timeSinceLastSend = currentTime - lastBulletSendTime;
+    
+    if (timeSinceLastSend < minInterval) {
+        const remainingTime = Math.ceil((minInterval - timeSinceLastSend) / 1000);
+        alert(`弹幕发送过快！请等待 ${remainingTime} 秒后再发送。`);
+        return;
+    }
+    
+    // 检查弹幕最小长度
+    const minLength = CONFIG.BULLET.MIN_LENGTH || 4;
+    const chineseCharCount = countChineseChars(text);
+    
+    if (chineseCharCount < minLength) {
+        alert(`弹幕内容至少需要 ${minLength} 个汉字，当前只有 ${chineseCharCount} 个汉字！`);
+        return;
+    }
+    
+    // 更新上次发送时间
+    lastBulletSendTime = currentTime;
     
     const bullet = {
         id: Date.now() + Math.random(),
@@ -1294,6 +1330,8 @@ elements.playAgain.addEventListener('click', async () => {
     CONFIG.BULLET.SPEED = defaultConfig.BULLET.SPEED;
     CONFIG.BULLET.HEIGHT = defaultConfig.BULLET.HEIGHT;
     CONFIG.BULLET.BASE_DAMAGE = defaultConfig.BULLET.BASE_DAMAGE;
+    CONFIG.BULLET.MIN_LENGTH = defaultConfig.BULLET.MIN_LENGTH || 4;
+    CONFIG.BULLET.MIN_INTERVAL = defaultConfig.BULLET.MIN_INTERVAL || 1000;
     CONFIG.BULLET.CRITICAL_RATE = defaultConfig.BULLET.CRITICAL_RATE;
     CONFIG.BULLET.CRITICAL_MULTIPLIER = defaultConfig.BULLET.CRITICAL_MULTIPLIER;
     
@@ -1345,6 +1383,9 @@ function loadConfigToUI() {
     elements.bossSpeed.value = CONFIG.BOSS.MOVE_SPEED;
     elements.bulletDamage.value = CONFIG.BULLET.BASE_DAMAGE;
     elements.bulletSpeed.value = CONFIG.BULLET.SPEED;
+    if (elements.bulletMinLength) {
+        elements.bulletMinLength.value = CONFIG.BULLET.MIN_LENGTH || 4;
+    }
     elements.criticalRate.value = Math.round(CONFIG.BULLET.CRITICAL_RATE * 100);
     elements.criticalMultiplier.value = CONFIG.BULLET.CRITICAL_MULTIPLIER;
     
@@ -1369,6 +1410,8 @@ function applyConfig() {
     // 更新弹幕配置
     CONFIG.BULLET.BASE_DAMAGE = parseInt(elements.bulletDamage.value);
     CONFIG.BULLET.SPEED = parseFloat(elements.bulletSpeed.value);
+    CONFIG.BULLET.MIN_LENGTH = parseInt(elements.bulletMinLength.value) || 4;
+    CONFIG.BULLET.MIN_INTERVAL = parseInt(elements.bulletMinInterval.value) || 1000;
     CONFIG.BULLET.CRITICAL_RATE = parseFloat(elements.criticalRate.value) / 100;
     CONFIG.BULLET.CRITICAL_MULTIPLIER = parseFloat(elements.criticalMultiplier.value);
     

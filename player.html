@@ -15,7 +15,9 @@
 
         body {
             font-family: 'Microsoft YaHei', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #dc2626 0%, #f59e0b 50%, #dc2626 100%);
+            background-size: 200% 200%;
+            animation: gradientShift 10s ease infinite;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -24,6 +26,54 @@
             padding: 20px;
             -webkit-user-select: none;
             user-select: none;
+            position: relative;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+        }
+
+        /* 新年标题 */
+        .new-year-title {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 50;
+            text-align: center;
+            color: #ffd700;
+            text-shadow: 
+                0 0 10px rgba(255, 215, 0, 0.8),
+                0 0 20px rgba(255, 215, 0, 0.6),
+                0 0 30px rgba(255, 215, 0, 0.4),
+                2px 2px 4px rgba(0, 0, 0, 0.5);
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            white-space: nowrap;
+            animation: titleGlow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes titleGlow {
+            0% {
+                text-shadow: 
+                    0 0 10px rgba(255, 215, 0, 0.8),
+                    0 0 20px rgba(255, 215, 0, 0.6),
+                    0 0 30px rgba(255, 215, 0, 0.4),
+                    2px 2px 4px rgba(0, 0, 0, 0.5);
+            }
+            100% {
+                text-shadow: 
+                    0 0 15px rgba(255, 215, 0, 1),
+                    0 0 30px rgba(255, 215, 0, 0.8),
+                    0 0 45px rgba(255, 215, 0, 0.6),
+                    2px 2px 4px rgba(0, 0, 0, 0.5);
+            }
         }
 
         .player-container {
@@ -180,6 +230,21 @@
 
             h1 {
                 font-size: 20px;
+            }
+            
+            /* 新年标题移动端优化 */
+            .new-year-title {
+                font-size: 18px;
+                top: 10px;
+                letter-spacing: 1px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .new-year-title {
+                font-size: 14px;
+                top: 5px;
+                letter-spacing: 0.5px;
             }
         }
     </style>
@@ -585,10 +650,40 @@
             }
         });
 
+        // 计算字符串中的中文字符数量
+        function countChineseChars(str) {
+            // 匹配中文字符（包括中文标点）
+            const chineseRegex = /[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef]/g;
+            const matches = str.match(chineseRegex);
+            return matches ? matches.length : 0;
+        }
+
+        let lastBulletSendTime = 0; // 上次发送弹幕的时间
+
         function sendBullet() {
             const text = elements.bulletInput.value.trim();
             if (!text) {
                 alert('请输入弹幕内容！');
+                return;
+            }
+            
+            // 检查弹幕发送间隔（默认1秒，与主游戏端保持一致）
+            const minInterval = 1000; // 玩家端使用固定值，主游戏端可在设置中配置
+            const currentTime = Date.now();
+            const timeSinceLastSend = currentTime - lastBulletSendTime;
+            
+            if (timeSinceLastSend < minInterval) {
+                const remainingTime = Math.ceil((minInterval - timeSinceLastSend) / 1000);
+                alert(`弹幕发送过快！请等待 ${remainingTime} 秒后再发送。`);
+                return;
+            }
+            
+            // 检查弹幕最小长度（默认4个汉字，与主游戏端保持一致）
+            const minLength = 4; // 玩家端使用固定值，主游戏端可在设置中配置
+            const chineseCharCount = countChineseChars(text);
+            
+            if (chineseCharCount < minLength) {
+                alert(`弹幕内容至少需要 ${minLength} 个汉字，当前只有 ${chineseCharCount} 个汉字！`);
                 return;
             }
 
@@ -596,6 +691,9 @@
                 alert('请先连接到服务器！');
                 return;
             }
+            
+            // 更新上次发送时间
+            lastBulletSendTime = currentTime;
 
             // 生成弹幕ID
             const bulletId = Date.now() + Math.random();

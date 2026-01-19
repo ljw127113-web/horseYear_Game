@@ -17,7 +17,9 @@
     "HEIGHT": 60,
     "BASE_DAMAGE": 10,
     "CRITICAL_RATE": 0.15,
-    "CRITICAL_MULTIPLIER": 5
+    "CRITICAL_MULTIPLIER": 5,
+    "MIN_LENGTH": 4,
+    "MIN_INTERVAL": 1000
   },
   "GAME": {
     "FPS": 60
