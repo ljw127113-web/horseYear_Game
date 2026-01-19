@@ -284,6 +284,13 @@
                 <input type="text" id="bulletInput" placeholder="输入弹幕内容..." maxlength="50">
                 <button class="btn btn-primary" id="sendBtn">发送</button>
             </div>
+            <div id="userDisplay" style="display: none; margin-top: 10px; padding: 10px; background: #f8f8f8; border-radius: 10px; display: flex; align-items: center; gap: 10px;">
+                <img id="userDisplayAvatar" src="" alt="头像" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid #ccc; display: none;">
+                <div style="display: flex; flex-direction: column; gap: 4px; font-size: 14px;">
+                    <span id="userDisplayName" style="font-weight: bold; color: #333;"></span>
+                    <span id="clientIdDisplay" style="color: #666; font-size: 12px;"></span>
+                </div>
+            </div>
             <div class="connection-info">
                 <strong>服务器地址：</strong>
                 <input type="text" id="serverUrl" style="width: 100%; margin-top: 5px; padding: 8px;" placeholder="wss://your-server.railway.app">
@@ -391,6 +398,7 @@
 
         // 页面加载时初始化
         initServerUrl();
+        loadProfile(); // 尝试加载本地玩家信息
 
         // 头像上传
         elements.uploadBtn.addEventListener('click', () => {
@@ -454,6 +462,34 @@
                 updateUserDisplay();
             } catch (e) {
                 console.warn('读取本地玩家信息失败', e);
+            }
+        }
+
+        function updateUserDisplay() {
+            if (!elements.userDisplay || !elements.userDisplayName || !elements.userDisplayAvatar) return;
+            const hasName = playerInfo.name && playerInfo.name.trim() !== '';
+            const hasAvatar = playerInfo.avatarUrl && playerInfo.avatarUrl.trim() !== '';
+            if (hasName) {
+                elements.userDisplayName.textContent = `玩家：${playerInfo.name}`;
+            } else {
+                elements.userDisplayName.textContent = '';
+            }
+            if (hasAvatar) {
+                elements.userDisplayAvatar.src = playerInfo.avatarUrl;
+                elements.userDisplayAvatar.style.display = 'block';
+            } else {
+                elements.userDisplayAvatar.style.display = 'none';
+            }
+            if (!playerInfo.playerId) {
+                playerInfo.playerId = generatePlayerId();
+            }
+            if (elements.clientIdDisplay) {
+                elements.clientIdDisplay.textContent = `唯一码：${playerInfo.playerId}`;
+            }
+            if (hasName || hasAvatar) {
+                elements.userDisplay.style.display = 'flex';
+            } else {
+                elements.userDisplay.style.display = 'none';
             }
         }
 
@@ -622,6 +658,11 @@
                              // 处理用户名确认成功
                              if (data.type === 'usernameConfirmed') {
                                  console.log('✅ 用户名确认成功:', data.message);
+                                if (data.playerId) {
+                                    playerInfo.playerId = data.playerId;
+                                    saveProfile();
+                                    updateUserDisplay();
+                                }
                                  isConnected = true;
                                  updateStatus(true);
                                  elements.connectBtn.textContent = '断开连接';
@@ -751,6 +792,11 @@
             if (!text) {
                 alert('请输入弹幕内容！');
                 return;
+            }
+            if (!playerInfo.playerId) {
+                playerInfo.playerId = generatePlayerId();
+                saveProfile();
+                updateUserDisplay();
             }
             
             // 检查弹幕发送间隔（默认1秒，与主游戏端保持一致）
