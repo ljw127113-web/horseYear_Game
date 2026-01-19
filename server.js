@@ -8,7 +8,9 @@ const PORT = process.env.PORT || 8080;
 // 存储所有连接的客户端
 const clients = new Set();
 // 存储所有已注册的用户名（用于检测重复）
-const registeredUsernames = new Map(); // Map<WebSocket, username>
+// 存储已注册用户名与玩家ID，用于重名判断
+// Map<WebSocket, { name: string, playerId: string }>
+const registeredUsernames = new Map();
 let gameState = null;
 
 // 创建HTTP服务器（处理健康检查和WebSocket升级）
@@ -162,6 +164,7 @@ wss.on('connection', (ws, req) => {
                     // 玩家信息（连接时发送）
                     const playerName = data.playerName || data.player?.name || '';
                     const avatarUrl = data.avatarUrl || data.player?.avatarUrl || '';
+                    const playerId = data.playerId || data.player?.playerId || '';
                     
                     // 检查用户名是否为空
                     if (!playerName || playerName.trim() === '') {
@@ -177,15 +180,27 @@ wss.on('connection', (ws, req) => {
                         break;
                     }
                     
-                    // 检查用户名是否已存在（不区分大小写）
+                    // 检查玩家ID是否存在
+                    if (!playerId || playerId.trim() === '') {
+                        try {
+                            ws.send(JSON.stringify({
+                                type: 'usernameError',
+                                message: '玩家ID缺失，请刷新页面重新进入！'
+                            }));
+                            console.log(`⚠️ 拒绝无ID玩家连接: ${clientId}`);
+                        } catch (error) {
+                            console.error('❌ 发送玩家ID错误消息失败:', error);
+                        }
+                        break;
+                    }
+                    
+                    // 检查用户名是否已存在（不区分大小写），但允许同一playerId复用同名
                     const normalizedName = playerName.trim().toLowerCase();
                     let isDuplicate = false;
-                    let existingClient = null;
                     
-                    registeredUsernames.forEach((name, client) => {
-                        if (name.toLowerCase() === normalizedName && client !== ws) {
+                    registeredUsernames.forEach((info) => {
+                        if (info.name.toLowerCase() === normalizedName && info.playerId !== playerId) {
                             isDuplicate = true;
-                            existingClient = client;
                         }
                     });
                     
@@ -196,20 +211,21 @@ wss.on('connection', (ws, req) => {
                                 type: 'usernameError',
                                 message: `用户名 "${playerName}" 已被使用，请重新输入！`
                             }));
-                            console.log(`⚠️ 拒绝重复用户名: "${playerName}" (已有客户端: ${existingClient})`);
+                            console.log(`⚠️ 拒绝重复用户名: "${playerName}" (客户端: ${clientId})`);
                         } catch (error) {
                             console.error('❌ 发送用户名错误消息失败:', error);
                         }
                     } else {
-                        // 用户名唯一，注册并确认
-                        registeredUsernames.set(ws, playerName.trim());
+                        // 用户名唯一或同ID复用，注册并确认
+                        registeredUsernames.set(ws, { name: playerName.trim(), playerId: playerId.trim() });
                         try {
                             ws.send(JSON.stringify({
                                 type: 'usernameConfirmed',
                                 message: '用户名注册成功！',
-                                playerName: playerName.trim()
+                                playerName: playerName.trim(),
+                                playerId: playerId.trim()
                             }));
-                            console.log(`✅ 注册用户名: "${playerName}" (客户端: ${clientId})`);
+                            console.log(`✅ 注册用户名: "${playerName}" (客户端: ${clientId}, playerId: ${playerId})`);
                         } catch (error) {
                             console.error('❌ 发送用户名确认消息失败:', error);
                         }
@@ -218,7 +234,8 @@ wss.on('connection', (ws, req) => {
                         broadcast({
                             type: 'playerJoined',
                             playerName: playerName.trim(),
-                            avatarUrl: avatarUrl
+                            avatarUrl: avatarUrl,
+                            playerId: playerId.trim()
                         }, ws);
                     }
                     break;
@@ -267,9 +284,9 @@ wss.on('connection', (ws, req) => {
         
         // 移除用户名注册
         if (registeredUsernames.has(ws)) {
-            const username = registeredUsernames.get(ws);
+            const info = registeredUsernames.get(ws);
             registeredUsernames.delete(ws);
-            console.log(`   移除用户名注册: "${username}"`);
+            console.log(`   移除用户名注册: "${info?.name}" (playerId: ${info?.playerId || '无'})`);
         }
         
         clients.delete(ws);
@@ -283,9 +300,9 @@ wss.on('connection', (ws, req) => {
         
         // 移除用户名注册
         if (registeredUsernames.has(ws)) {
-            const username = registeredUsernames.get(ws);
-            registeredUsernames.delete(ws);
-            console.log(`   移除用户名注册: "${username}"`);
+        const info = registeredUsernames.get(ws);
+        registeredUsernames.delete(ws);
+        console.log(`   移除用户名注册: "${info?.name}" (playerId: ${info?.playerId || '无'})`);
         }
         
         clients.delete(ws);

@@ -297,11 +297,18 @@
 
     <script>
         let ws = null;
+        let isConnected = false;
+        const STORAGE_KEY = 'player_profile_v1';
+        // playerId 用于唯一标识终端，避免重名误判
+        function generatePlayerId() {
+            if (crypto.randomUUID) return crypto.randomUUID();
+            return 'player_' + Date.now() + '_' + Math.random().toString(16).slice(2);
+        }
         let playerInfo = {
             name: '',
-            avatarUrl: ''
+            avatarUrl: '',
+            playerId: ''
         };
-        let isConnected = false;
 
         // DOM元素
         const elements = {
@@ -317,7 +324,12 @@
             bulletInput: document.getElementById('bulletInput'),
             sendBtn: document.getElementById('sendBtn'),
             serverUrl: document.getElementById('serverUrl'),
-            connectBtn: document.getElementById('connectBtn')
+            connectBtn: document.getElementById('connectBtn'),
+            reconnectBtn: document.getElementById('reconnectBtn'),
+            userDisplay: document.getElementById('userDisplay'),
+            userDisplayName: document.getElementById('userDisplayName'),
+            userDisplayAvatar: document.getElementById('userDisplayAvatar'),
+            clientIdDisplay: document.getElementById('clientIdDisplay')
         };
 
         // 从URL参数读取WebSocket服务器地址
@@ -410,23 +422,63 @@
             elements.confirmSetup.disabled = !(hasAvatar && hasName);
         }
 
-         // 确认设置
-         elements.confirmSetup.addEventListener('click', () => {
-             const trimmedName = elements.playerName.value.trim();
-             if (!trimmedName) {
-                 alert('请输入用户名！');
-                 return;
-             }
-             playerInfo.name = trimmedName;
-             
-             // 隐藏设置界面，显示弹幕输入界面（但不自动连接）
-             // 等待服务器确认用户名后再显示弹幕输入
-             elements.playerSetup.style.display = 'none';
-             elements.bulletSection.style.display = 'block';
-             
-             // 自动连接服务器（服务器会验证用户名）
-             connectToServer();
-         });
+        // 本地存储
+        function saveProfile() {
+            const data = {
+                name: playerInfo.name,
+                avatarUrl: playerInfo.avatarUrl,
+                playerId: playerInfo.playerId || generatePlayerId()
+            };
+            playerInfo.playerId = data.playerId;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }
+
+        function loadProfile() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) return;
+            try {
+                const data = JSON.parse(saved);
+                playerInfo.name = data.name || '';
+                playerInfo.avatarUrl = data.avatarUrl || '';
+                playerInfo.playerId = data.playerId || generatePlayerId();
+
+                if (playerInfo.avatarUrl) {
+                    elements.avatarImg.src = playerInfo.avatarUrl;
+                    elements.avatarImg.style.display = 'block';
+                    document.querySelector('.avatar-placeholder').style.display = 'none';
+                }
+                if (playerInfo.name) {
+                    elements.playerName.value = playerInfo.name;
+                }
+                checkSetupComplete();
+                updateUserDisplay();
+            } catch (e) {
+                console.warn('读取本地玩家信息失败', e);
+            }
+        }
+
+        // 确认设置
+        elements.confirmSetup.addEventListener('click', () => {
+            const trimmedName = elements.playerName.value.trim();
+            if (!trimmedName) {
+                alert('请输入用户名！');
+                return;
+            }
+            playerInfo.name = trimmedName;
+            if (!playerInfo.playerId) {
+                playerInfo.playerId = generatePlayerId();
+            }
+            saveProfile();
+            updateUserDisplay();
+            
+            // 隐藏设置界面，显示弹幕输入界面（但不自动连接）
+            // 等待服务器确认用户名后再显示弹幕输入
+            elements.playerSetup.style.display = 'none';
+            elements.bulletSection.style.display = 'block';
+            
+            // 自动连接服务器（服务器会验证用户名）
+            connectToServer();
+        });
 
          // 连接服务器
          elements.connectBtn.addEventListener('click', () => {
@@ -475,6 +527,13 @@
             elements.serverUrl.value = serverUrl;
             
             console.log('正在连接到WebSocket服务器:', serverUrl);
+            elements.status.textContent = '🔄 正在连接服务器…';
+            elements.connectBtn.textContent = '连接中…';
+            elements.connectBtn.disabled = true;
+            if (elements.reconnectBtn) {
+                elements.reconnectBtn.disabled = true;
+                elements.reconnectBtn.textContent = '重连中…';
+            }
             console.log('连接协议:', serverUrl.startsWith('wss://') ? 'WSS (安全)' : 'WS (非安全)');
             console.log('页面协议:', window.location.protocol);
 
@@ -493,23 +552,31 @@
                     console.log(`尝试连接 (${urlIndex + 1}/${urlsToTry.length}):`, url);
                     ws = new WebSocket(url);
                     
-                     ws.onopen = () => {
-                         console.log(`✅ 连接成功! 使用URL: ${url}`);
-                         // 注意：此时还未确认用户名，所以 isConnected 暂时不设为 true
-                         
-                         // 延迟发送玩家信息，确保连接已完全建立
-                         setTimeout(() => {
-                             if (ws && ws.readyState === WebSocket.OPEN) {
-                                 // 发送玩家信息（服务器会验证用户名是否重复）
-                                 ws.send(JSON.stringify({
-                                     type: 'playerInfo',
-                                     playerName: playerInfo.name,
-                                     avatarUrl: playerInfo.avatarUrl
-                                 }));
-                                 console.log('📤 已发送玩家信息，等待服务器验证...');
-                             }
-                         }, 100);
-                     };
+                    ws.onopen = () => {
+                        console.log(`✅ 连接成功! 使用URL: ${url}`);
+                        elements.status.textContent = '✅ 已连接，等待用户名验证…';
+                        elements.connectBtn.textContent = '断开连接';
+                        elements.connectBtn.disabled = false;
+                        if (elements.reconnectBtn) {
+                            elements.reconnectBtn.disabled = false;
+                            elements.reconnectBtn.textContent = '重新连接';
+                        }
+                        
+                        // 延迟发送玩家信息，确保连接已完全建立
+                        setTimeout(() => {
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                // 发送玩家信息（服务器会验证用户名是否重复）
+                                if (!playerInfo.playerId) playerInfo.playerId = generatePlayerId();
+                                ws.send(JSON.stringify({
+                                    type: 'playerInfo',
+                                    playerName: playerInfo.name,
+                                    avatarUrl: playerInfo.avatarUrl,
+                                    playerId: playerInfo.playerId
+                                }));
+                                console.log('📤 已发送玩家信息，等待服务器验证...');
+                            }
+                        }, 100);
+                    };
                     
                      ws.onmessage = (event) => {
                          try {
@@ -528,6 +595,11 @@
                                  isConnected = false;
                                  updateStatus(false);
                                  elements.connectBtn.textContent = '连接服务器';
+                                elements.connectBtn.disabled = false;
+                                if (elements.reconnectBtn) {
+                                    elements.reconnectBtn.disabled = false;
+                                    elements.reconnectBtn.textContent = '重新连接';
+                                }
                                  
                                  // 显示错误提示
                                  alert(data.message || '用户名无效，请重新输入！');
@@ -553,6 +625,10 @@
                                  isConnected = true;
                                  updateStatus(true);
                                  elements.connectBtn.textContent = '断开连接';
+                                if (elements.reconnectBtn) {
+                                    elements.reconnectBtn.disabled = false;
+                                    elements.reconnectBtn.textContent = '重新连接';
+                                }
                                  
                                  // 确保弹幕输入界面已显示
                                  elements.playerSetup.style.display = 'none';
@@ -585,6 +661,14 @@
                             url: url
                         });
                         
+                        elements.status.textContent = '⚠️ 连接异常，正在尝试其他地址…';
+                        elements.connectBtn.textContent = '连接服务器';
+                        elements.connectBtn.disabled = false;
+                        if (elements.reconnectBtn) {
+                            elements.reconnectBtn.disabled = false;
+                            elements.reconnectBtn.textContent = '重新连接';
+                        }
+                        
                         // 如果还有其他URL可以尝试
                         if (urlIndex < urlsToTry.length - 1) {
                             urlIndex++;
@@ -613,6 +697,11 @@
                             isConnected = false;
                             updateStatus(false);
                             elements.connectBtn.textContent = '连接服务器';
+                            elements.connectBtn.disabled = false;
+                            if (elements.reconnectBtn) {
+                                elements.reconnectBtn.disabled = false;
+                                elements.reconnectBtn.textContent = '重新连接';
+                            }
                             ws = null;
                         }
                     };
@@ -650,12 +739,9 @@
             }
         });
 
-        // 计算字符串中的中文字符数量
-        function countChineseChars(str) {
-            // 匹配中文字符（包括中文标点）
-            const chineseRegex = /[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef]/g;
-            const matches = str.match(chineseRegex);
-            return matches ? matches.length : 0;
+        // 计算字符串长度（兼容表情符号）
+        function getCharLength(str) {
+            return Array.from(str).length;
         }
 
         let lastBulletSendTime = 0; // 上次发送弹幕的时间
@@ -678,19 +764,19 @@
                 return;
             }
             
-            // 检查弹幕最小长度（默认4个汉字，与主游戏端保持一致）
+            // 检查弹幕最小长度（默认4个字符，与主游戏端保持一致）
             const minLength = 4; // 玩家端使用固定值，主游戏端可在设置中配置
-            const chineseCharCount = countChineseChars(text);
+            const charLen = getCharLength(text);
             
-            if (chineseCharCount < minLength) {
-                alert(`弹幕内容至少需要 ${minLength} 个汉字，当前只有 ${chineseCharCount} 个汉字！`);
+            if (charLen < minLength) {
+                alert(`弹幕内容至少需要 ${minLength} 个字符，当前只有 ${charLen} 个字符！`);
                 return;
             }
 
             // 检查弹幕最大长度（默认15个字）
             const maxLength = 15;
-            if (text.length > maxLength) {
-                alert(`弹幕内容不能超过 ${maxLength} 个字，当前 ${text.length} 个字！`);
+            if (charLen > maxLength) {
+                alert(`弹幕内容不能超过 ${maxLength} 个字符，当前 ${charLen} 个字符！`);
                 return;
             }
 
@@ -710,7 +796,8 @@
                 type: 'bullet',
                 player: {
                     name: playerInfo.name,
-                    avatarUrl: playerInfo.avatarUrl
+                    avatarUrl: playerInfo.avatarUrl,
+                    playerId: playerInfo.playerId
                 },
                 text: text,
                 id: bulletId  // 添加ID用于去重

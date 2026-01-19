@@ -606,12 +606,9 @@ elements.bulletInput.addEventListener('keypress', (e) => {
     }
 });
 
-// 计算字符串中的中文字符数量
-function countChineseChars(str) {
-    // 匹配中文字符（包括中文标点）
-    const chineseRegex = /[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef]/g;
-    const matches = str.match(chineseRegex);
-    return matches ? matches.length : 0;
+// 计算字符串长度（按字符数，兼容表情符号）
+function getCharLength(str) {
+    return Array.from(str).length;
 }
 
 function sendBullet() {
@@ -631,17 +628,17 @@ function sendBullet() {
     
     // 检查弹幕最小长度
     const minLength = CONFIG.BULLET.MIN_LENGTH || 4;
-    const chineseCharCount = countChineseChars(text);
+    const charLen = getCharLength(text);
     
-    if (chineseCharCount < minLength) {
-        alert(`弹幕内容至少需要 ${minLength} 个汉字，当前只有 ${chineseCharCount} 个汉字！`);
+    if (charLen < minLength) {
+        alert(`弹幕内容至少需要 ${minLength} 个字符，当前只有 ${charLen} 个字符！`);
         return;
     }
     
     // 检查弹幕最大长度（按字符数）
     const maxLength = CONFIG.BULLET.MAX_LENGTH || 15;
-    if (text.length > maxLength) {
-        alert(`弹幕内容不能超过 ${maxLength} 个字，当前 ${text.length} 个字！`);
+    if (charLen > maxLength) {
+        alert(`弹幕内容不能超过 ${maxLength} 个字符，当前 ${charLen} 个字符！`);
         return;
     }
     
