@@ -7,6 +7,8 @@ const PORT = process.env.PORT || 8080;
 
 // 存储所有连接的客户端
 const clients = new Set();
+// 存储所有已注册的用户名（用于检测重复）
+const registeredUsernames = new Map(); // Map<WebSocket, username>
 let gameState = null;
 
 // 创建HTTP服务器（处理健康检查和WebSocket升级）
@@ -158,13 +160,67 @@ wss.on('connection', (ws, req) => {
                     
                 case 'playerInfo':
                     // 玩家信息（连接时发送）
-                    console.log(`👤 玩家连接: ${data.playerName || data.player?.name}`);
-                    // 广播给其他玩家
-                    broadcast({
-                        type: 'playerJoined',
-                        playerName: data.playerName || data.player?.name,
-                        avatarUrl: data.avatarUrl || data.player?.avatarUrl
-                    }, ws);
+                    const playerName = data.playerName || data.player?.name || '';
+                    const avatarUrl = data.avatarUrl || data.player?.avatarUrl || '';
+                    
+                    // 检查用户名是否为空
+                    if (!playerName || playerName.trim() === '') {
+                        try {
+                            ws.send(JSON.stringify({
+                                type: 'usernameError',
+                                message: '用户名不能为空，请重新输入！'
+                            }));
+                            console.log(`⚠️ 拒绝空用户名连接: ${clientId}`);
+                        } catch (error) {
+                            console.error('❌ 发送用户名错误消息失败:', error);
+                        }
+                        break;
+                    }
+                    
+                    // 检查用户名是否已存在（不区分大小写）
+                    const normalizedName = playerName.trim().toLowerCase();
+                    let isDuplicate = false;
+                    let existingClient = null;
+                    
+                    registeredUsernames.forEach((name, client) => {
+                        if (name.toLowerCase() === normalizedName && client !== ws) {
+                            isDuplicate = true;
+                            existingClient = client;
+                        }
+                    });
+                    
+                    if (isDuplicate) {
+                        // 用户名重复，拒绝连接
+                        try {
+                            ws.send(JSON.stringify({
+                                type: 'usernameError',
+                                message: `用户名 "${playerName}" 已被使用，请重新输入！`
+                            }));
+                            console.log(`⚠️ 拒绝重复用户名: "${playerName}" (已有客户端: ${existingClient})`);
+                        } catch (error) {
+                            console.error('❌ 发送用户名错误消息失败:', error);
+                        }
+                    } else {
+                        // 用户名唯一，注册并确认
+                        registeredUsernames.set(ws, playerName.trim());
+                        try {
+                            ws.send(JSON.stringify({
+                                type: 'usernameConfirmed',
+                                message: '用户名注册成功！',
+                                playerName: playerName.trim()
+                            }));
+                            console.log(`✅ 注册用户名: "${playerName}" (客户端: ${clientId})`);
+                        } catch (error) {
+                            console.error('❌ 发送用户名确认消息失败:', error);
+                        }
+                        
+                        // 广播给其他玩家
+                        broadcast({
+                            type: 'playerJoined',
+                            playerName: playerName.trim(),
+                            avatarUrl: avatarUrl
+                        }, ws);
+                    }
                     break;
                     
                 case 'bossState':
@@ -194,13 +250,30 @@ wss.on('connection', (ws, req) => {
     ws.on('close', (code, reason) => {
         console.log(`🔌 客户端断开: ${clientId}`);
         console.log(`   Code: ${code}, Reason: ${reason ? reason.toString() : '无'}`);
+        
+        // 移除用户名注册
+        if (registeredUsernames.has(ws)) {
+            const username = registeredUsernames.get(ws);
+            registeredUsernames.delete(ws);
+            console.log(`   移除用户名注册: "${username}"`);
+        }
+        
         clients.delete(ws);
         console.log(`   当前连接数: ${clients.size}`);
+        console.log(`   已注册用户名数: ${registeredUsernames.size}`);
     });
     
     // 错误处理
     ws.on('error', (error) => {
         console.error(`❌ WebSocket错误 [${clientId}]:`, error.message || error);
+        
+        // 移除用户名注册
+        if (registeredUsernames.has(ws)) {
+            const username = registeredUsernames.get(ws);
+            registeredUsernames.delete(ws);
+            console.log(`   移除用户名注册: "${username}"`);
+        }
+        
         clients.delete(ws);
     });
 });

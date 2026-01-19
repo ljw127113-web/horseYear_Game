@@ -342,24 +342,40 @@
             elements.confirmSetup.disabled = !(hasAvatar && hasName);
         }
 
-        // 确认设置
-        elements.confirmSetup.addEventListener('click', () => {
-            playerInfo.name = elements.playerName.value.trim();
-            elements.playerSetup.style.display = 'none';
-            elements.bulletSection.style.display = 'block';
-            
-            // 自动连接服务器
-            connectToServer();
-        });
+         // 确认设置
+         elements.confirmSetup.addEventListener('click', () => {
+             const trimmedName = elements.playerName.value.trim();
+             if (!trimmedName) {
+                 alert('请输入用户名！');
+                 return;
+             }
+             playerInfo.name = trimmedName;
+             
+             // 隐藏设置界面，显示弹幕输入界面（但不自动连接）
+             // 等待服务器确认用户名后再显示弹幕输入
+             elements.playerSetup.style.display = 'none';
+             elements.bulletSection.style.display = 'block';
+             
+             // 自动连接服务器（服务器会验证用户名）
+             connectToServer();
+         });
 
-        // 连接服务器
-        elements.connectBtn.addEventListener('click', () => {
-            if (isConnected) {
-                disconnectFromServer();
-            } else {
-                connectToServer();
-            }
-        });
+         // 连接服务器
+         elements.connectBtn.addEventListener('click', () => {
+             if (isConnected) {
+                 disconnectFromServer();
+             } else {
+                 // 检查是否已完成设置
+                 if (!playerInfo.name || playerInfo.name.trim() === '') {
+                     alert('请先完成玩家设置（输入用户名和上传头像）！');
+                     // 显示设置界面
+                     elements.playerSetup.style.display = 'block';
+                     elements.bulletSection.style.display = 'none';
+                     return;
+                 }
+                 connectToServer();
+             }
+         });
 
         function connectToServer() {
             // 优先从URL参数读取
@@ -409,29 +425,88 @@
                     console.log(`尝试连接 (${urlIndex + 1}/${urlsToTry.length}):`, url);
                     ws = new WebSocket(url);
                     
-                    ws.onopen = () => {
-                        console.log(`✅ 连接成功! 使用URL: ${url}`);
-                        isConnected = true;
-                        updateStatus(true);
-                        elements.connectBtn.textContent = '断开连接';
-                        
-                        // 发送玩家信息
-                        ws.send(JSON.stringify({
-                            type: 'playerInfo',
-                            playerName: playerInfo.name,
-                            avatarUrl: playerInfo.avatarUrl
-                        }));
-                    };
+                     ws.onopen = () => {
+                         console.log(`✅ 连接成功! 使用URL: ${url}`);
+                         // 注意：此时还未确认用户名，所以 isConnected 暂时不设为 true
+                         
+                         // 延迟发送玩家信息，确保连接已完全建立
+                         setTimeout(() => {
+                             if (ws && ws.readyState === WebSocket.OPEN) {
+                                 // 发送玩家信息（服务器会验证用户名是否重复）
+                                 ws.send(JSON.stringify({
+                                     type: 'playerInfo',
+                                     playerName: playerInfo.name,
+                                     avatarUrl: playerInfo.avatarUrl
+                                 }));
+                                 console.log('📤 已发送玩家信息，等待服务器验证...');
+                             }
+                         }, 100);
+                     };
                     
-                    ws.onmessage = (event) => {
-                        try {
-                            const data = JSON.parse(event.data);
-                            console.log('收到消息:', data);
-                            // 玩家端只需要确认连接，不需要处理其他消息
-                        } catch (error) {
-                            console.error('消息解析错误:', error);
-                        }
-                    };
+                     ws.onmessage = (event) => {
+                         try {
+                             const data = JSON.parse(event.data);
+                             console.log('收到消息:', data);
+                             
+                             // 处理用户名错误（重复或为空）
+                             if (data.type === 'usernameError') {
+                                 console.error('❌ 用户名错误:', data.message);
+                                 
+                                 // 断开连接
+                                 if (ws) {
+                                     ws.close();
+                                     ws = null;
+                                 }
+                                 isConnected = false;
+                                 updateStatus(false);
+                                 elements.connectBtn.textContent = '连接服务器';
+                                 
+                                 // 显示错误提示
+                                 alert(data.message || '用户名无效，请重新输入！');
+                                 
+                                 // 恢复到设置界面，让玩家重新输入用户名
+                                 elements.playerSetup.style.display = 'block';
+                                 elements.bulletSection.style.display = 'none';
+                                 
+                                 // 清空并聚焦用户名输入框
+                                 elements.playerName.value = '';
+                                 elements.playerName.focus();
+                                 
+                                 // 重置玩家信息
+                                 playerInfo.name = '';
+                                 elements.confirmSetup.disabled = true;
+                                 
+                                 return;
+                             }
+                             
+                             // 处理用户名确认成功
+                             if (data.type === 'usernameConfirmed') {
+                                 console.log('✅ 用户名确认成功:', data.message);
+                                 isConnected = true;
+                                 updateStatus(true);
+                                 elements.connectBtn.textContent = '断开连接';
+                                 
+                                 // 确保弹幕输入界面已显示
+                                 elements.playerSetup.style.display = 'none';
+                                 elements.bulletSection.style.display = 'block';
+                                 
+                                 // 聚焦弹幕输入框
+                                 setTimeout(() => {
+                                     elements.bulletInput.focus();
+                                 }, 100);
+                                 
+                                 return;
+                             }
+                             
+                             // 处理连接成功消息（旧格式兼容）
+                             if (data.type === 'connected') {
+                                 console.log('✅ 服务器连接确认:', data.message);
+                                 // 此时用户名还未验证，等待 usernameConfirmed 消息
+                             }
+                         } catch (error) {
+                             console.error('消息解析错误:', error);
+                         }
+                     };
                     
                     ws.onerror = (error) => {
                         console.error(`❌ WebSocket错误 (尝试 ${urlIndex + 1}):`, error);
