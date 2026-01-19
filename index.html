@@ -39,6 +39,24 @@
                 ⚙️ 设置
             </button>
             
+            <!-- 连接控制按钮组 -->
+            <div class="connection-controls">
+                <button id="reconnectBtn" class="connection-btn" title="重新连接服务器">
+                    🔄 保持连接
+                </button>
+                <button id="disconnectBtn" class="connection-btn" title="断开服务器连接">
+                    ⛔ 断开连接
+                </button>
+                <div class="connection-status-info" id="connectionStatusInfo">
+                    <span class="status-label">连接状态：</span>
+                    <span id="connectionStatusText" class="status-text">未连接</span>
+                    <span class="connection-duration" id="connectionDuration" style="display: none;">
+                        <span> | 连接时长：</span>
+                        <span id="connectionTime">00:00</span>
+                    </span>
+                </div>
+            </div>
+            
             <!-- 版本号显示 -->
             <div class="version-display" id="versionDisplay" title="游戏版本号">
                 v<span id="versionNumber">1.0.0.0</span>

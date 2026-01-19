@@ -27,6 +27,11 @@ let CONFIG = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 // ============ WebSocket多玩家支持 ============
 let ws = null;
 let wsConnected = false;
+let connectionStartTime = null; // 连接开始时间
+let connectionDurationTimer = null; // 连接时长更新定时器
+let heartbeatTimer = null; // 心跳定时器
+const HEARTBEAT_INTERVAL = 30000; // 心跳间隔30秒（延长连接时间）
+const CONNECTION_TIMEOUT = 120000; // 连接超时时间2分钟（可延长）
 
 // WebSocket服务器地址配置
 // 优先级：URL参数 > 环境变量 > 默认值
@@ -267,6 +272,11 @@ const elements = {
     clearStatsBtn: document.getElementById('clearStatsBtn'),
     bossImageInput: document.getElementById('bossImageInput'),
     bossImagePreview: document.getElementById('bossImagePreview'),
+    reconnectBtn: document.getElementById('reconnectBtn'),
+    disconnectBtn: document.getElementById('disconnectBtn'),
+    connectionStatusText: document.getElementById('connectionStatusText'),
+    connectionDuration: document.getElementById('connectionDuration'),
+    connectionTime: document.getElementById('connectionTime'),
     uploadBossImageBtn: document.getElementById('uploadBossImageBtn'),
     bossHP: document.getElementById('bossHP'),
     bossSpeed: document.getElementById('bossSpeed'),
@@ -405,6 +415,140 @@ function updateServerStatus(connected, detail = '') {
             detailEl.style.display = 'block';
         }
     }
+    
+    // 更新游戏界面中的连接状态
+    updateConnectionStatus(connected, detail);
+}
+
+// 更新连接状态显示（游戏界面中）
+function updateConnectionStatus(connected, detail = '') {
+    if (!elements.connectionStatusText) return;
+    
+    if (connected) {
+        elements.connectionStatusText.textContent = '已连接';
+        elements.connectionStatusText.className = 'status-text status-connected';
+        if (elements.connectionDuration) {
+            elements.connectionDuration.style.display = 'inline';
+        }
+        startConnectionDurationTimer();
+    } else {
+        elements.connectionStatusText.textContent = detail || '未连接';
+        elements.connectionStatusText.className = 'status-text status-disconnected';
+        if (elements.connectionDuration) {
+            elements.connectionDuration.style.display = 'none';
+        }
+        stopConnectionDurationTimer();
+    }
+}
+
+// 启动连接时长计时器
+function startConnectionDurationTimer() {
+    stopConnectionDurationTimer(); // 先清除旧的定时器
+    
+    connectionStartTime = Date.now();
+    
+    connectionDurationTimer = setInterval(() => {
+        if (connectionStartTime && wsConnected) {
+            const duration = Math.floor((Date.now() - connectionStartTime) / 1000);
+            const minutes = Math.floor(duration / 60);
+            const seconds = duration % 60;
+            if (elements.connectionTime) {
+                elements.connectionTime.textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }
+    }, 1000); // 每秒更新一次
+}
+
+// 停止连接时长计时器
+function stopConnectionDurationTimer() {
+    if (connectionDurationTimer) {
+        clearInterval(connectionDurationTimer);
+        connectionDurationTimer = null;
+    }
+    connectionStartTime = null;
+    if (elements.connectionTime) {
+        elements.connectionTime.textContent = '00:00';
+    }
+}
+
+// 启动心跳机制（延长连接时间）
+function startHeartbeat() {
+    stopHeartbeat(); // 先清除旧的心跳定时器
+    
+    heartbeatTimer = setInterval(() => {
+        if (ws && wsConnected && ws.readyState === WebSocket.OPEN) {
+            try {
+                // 发送ping消息保持连接
+                ws.send(JSON.stringify({
+                    type: 'ping',
+                    timestamp: Date.now()
+                }));
+                console.log('💓 发送心跳包');
+            } catch (error) {
+                console.error('发送心跳包失败:', error);
+            }
+        }
+    }, HEARTBEAT_INTERVAL);
+}
+
+// 停止心跳机制
+function stopHeartbeat() {
+    if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+    }
+}
+
+// 重新连接WebSocket（不刷新游戏数据）
+function reconnectWebSocket() {
+    console.log('🔄 手动重连WebSocket服务器...');
+    
+    // 先断开现有连接
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    
+    wsConnected = false;
+    stopHeartbeat();
+    stopConnectionDurationTimer();
+    updateServerStatus(false, '正在重连...');
+    
+    // 延迟后重新连接（保持游戏数据不变）
+    setTimeout(() => {
+        connectWebSocket();
+    }, 500);
+}
+
+// 断开WebSocket连接
+function disconnectWebSocket() {
+    console.log('⛔ 手动断开WebSocket连接...');
+    
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    
+    wsConnected = false;
+    stopHeartbeat();
+    stopConnectionDurationTimer();
+    updateServerStatus(false, '已断开连接');
+}
+
+// 连接控制按钮事件
+if (elements.reconnectBtn) {
+    elements.reconnectBtn.addEventListener('click', () => {
+        reconnectWebSocket();
+    });
+}
+
+if (elements.disconnectBtn) {
+    elements.disconnectBtn.addEventListener('click', () => {
+        if (confirm('确定要断开服务器连接吗？断开后将无法接收其他玩家的弹幕。')) {
+            disconnectWebSocket();
+        }
+    });
 }
 
 elements.confirmSetup.addEventListener('click', () => {
@@ -1491,18 +1635,23 @@ function connectWebSocket() {
             wsConnected = true;
             updateServerStatus(true, '已连接到服务器');
             
+            // 启动心跳机制
+            startHeartbeat();
+            
             // 发送玩家信息（确保连接完全ready后再发送）
-            if (gameState.player.name && ws.readyState === WebSocket.OPEN) {
-                try {
-                    ws.send(JSON.stringify({
-                        type: 'playerInfo',
-                        playerName: gameState.player.name,
-                        avatarUrl: gameState.player.avatarUrl
-                    }));
-                } catch (error) {
-                    console.error('发送玩家信息失败:', error);
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN && gameState.player.name) {
+                    try {
+                        ws.send(JSON.stringify({
+                            type: 'playerInfo',
+                            playerName: gameState.player.name,
+                            avatarUrl: gameState.player.avatarUrl
+                        }));
+                    } catch (error) {
+                        console.error('发送玩家信息失败:', error);
+                    }
                 }
-            }
+            }, 100);
         };
         
         ws.onmessage = (event) => {
@@ -1550,6 +1699,16 @@ function connectWebSocket() {
                             location.reload();
                         }
                         break;
+                        
+                    case 'pong':
+                        // 收到心跳响应
+                        console.log('💓 收到心跳响应');
+                        break;
+                        
+                    case 'pong':
+                        // 收到心跳响应
+                        console.log('💓 收到心跳响应');
+                        break;
                 }
             } catch (error) {
                 console.error('消息解析错误:', error);
@@ -1565,9 +1724,10 @@ function connectWebSocket() {
         ws.onclose = () => {
             console.log('WebSocket连接已关闭');
             wsConnected = false;
+            stopHeartbeat();
+            stopConnectionDurationTimer();
             updateServerStatus(false, '连接已断开');
-            // 尝试重连（可选）
-            // setTimeout(connectWebSocket, 3000);
+            // 不自动重连，由用户手动点击保持连接按钮
         };
     } catch (error) {
         console.warn('WebSocket连接失败:', error.message);
@@ -1586,6 +1746,8 @@ elements.confirmSetup.addEventListener('click', () => {
 
 // 页面卸载时断开连接
 window.addEventListener('beforeunload', () => {
+    stopHeartbeat();
+    stopConnectionDurationTimer();
     if (ws) {
         ws.close();
     }

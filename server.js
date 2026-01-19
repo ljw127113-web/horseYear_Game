@@ -237,6 +237,18 @@ wss.on('connection', (ws, req) => {
                     console.log('🔄 游戏已重置');
                     break;
                     
+                case 'ping':
+                    // 心跳包 - 回复pong
+                    try {
+                        ws.send(JSON.stringify({
+                            type: 'pong',
+                            timestamp: Date.now()
+                        }));
+                    } catch (error) {
+                        console.error('❌ 发送心跳响应失败:', error);
+                    }
+                    break;
+                    
                 default:
                     console.log(`⚠️ 未知消息类型: ${data.type}`);
             }
