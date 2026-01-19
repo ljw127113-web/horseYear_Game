@@ -16,6 +16,7 @@ const DEFAULT_CONFIG = {
         CRITICAL_RATE: 0.15,    // 从default-config.json同步（15%）
         CRITICAL_MULTIPLIER: 5, // 从default-config.json同步
         MIN_LENGTH: 4,          // 从default-config.json同步（最小长度，单位：汉字）
+        MAX_LENGTH: 15,         // 从default-config.json同步（最大长度，单位：字符）
         MIN_INTERVAL: 1000      // 从default-config.json同步（最短间隔，单位：毫秒）
     },
     GAME: {
@@ -266,6 +267,7 @@ const elements = {
     battleLog: document.getElementById('battleLog'),
     killerAvatar: document.getElementById('killerAvatar'),
     killerName: document.getElementById('killerName'),
+    killerBullet: document.getElementById('killerBullet'),
     playAgain: document.getElementById('playAgain'),
     openConfigBtn: document.getElementById('openConfigBtn'),
     versionDisplay: document.getElementById('versionDisplay'),
@@ -286,6 +288,7 @@ const elements = {
     bulletDamage: document.getElementById('bulletDamage'),
     bulletSpeed: document.getElementById('bulletSpeed'),
     bulletMinLength: document.getElementById('bulletMinLength'),
+    bulletMaxLength: document.getElementById('bulletMaxLength'),
     bulletMinInterval: document.getElementById('bulletMinInterval'),
     criticalRate: document.getElementById('criticalRate'),
     criticalMultiplier: document.getElementById('criticalMultiplier'),
@@ -635,6 +638,13 @@ function sendBullet() {
         return;
     }
     
+    // 检查弹幕最大长度（按字符数）
+    const maxLength = CONFIG.BULLET.MAX_LENGTH || 15;
+    if (text.length > maxLength) {
+        alert(`弹幕内容不能超过 ${maxLength} 个字，当前 ${text.length} 个字！`);
+        return;
+    }
+    
     // 更新上次发送时间
     lastBulletSendTime = currentTime;
     
@@ -802,6 +812,7 @@ function updateBullets() {
                     name: bullet.player.name,
                     avatarUrl: bullet.player.avatarUrl
                 };
+                gameState.lastHitBulletText = bullet.text || '';
                 gameState.isGameOver = true;
             }
             
@@ -1330,6 +1341,15 @@ function showKiller() {
     
     elements.killerAvatar.src = gameState.lastHitPlayer.avatarUrl;
     elements.killerName.textContent = gameState.lastHitPlayer.name;
+    
+    if (elements.killerBullet) {
+        if (gameState.lastHitBulletText) {
+            elements.killerBullet.textContent = `最后一击弹幕：${gameState.lastHitBulletText}`;
+            elements.killerBullet.style.display = 'block';
+        } else {
+            elements.killerBullet.style.display = 'none';
+        }
+    }
     elements.killerDisplay.style.display = 'flex';
 }
 
@@ -1361,6 +1381,7 @@ function startGame() {
     gameState.boss.x = elements.gameCanvas.width / 2;
     gameState.boss.y = elements.gameCanvas.height / 2;
     gameState.boss.flashTimer = 0;
+    gameState.lastHitBulletText = '';
     
     // 更新血量显示
     updateHPDisplay();
@@ -1385,6 +1406,7 @@ elements.playAgain.addEventListener('click', async () => {
     CONFIG.BULLET.HEIGHT = defaultConfig.BULLET.HEIGHT;
     CONFIG.BULLET.BASE_DAMAGE = defaultConfig.BULLET.BASE_DAMAGE;
     CONFIG.BULLET.MIN_LENGTH = defaultConfig.BULLET.MIN_LENGTH || 4;
+    CONFIG.BULLET.MAX_LENGTH = defaultConfig.BULLET.MAX_LENGTH || 15;
     CONFIG.BULLET.MIN_INTERVAL = defaultConfig.BULLET.MIN_INTERVAL || 1000;
     CONFIG.BULLET.CRITICAL_RATE = defaultConfig.BULLET.CRITICAL_RATE;
     CONFIG.BULLET.CRITICAL_MULTIPLIER = defaultConfig.BULLET.CRITICAL_MULTIPLIER;
@@ -1440,6 +1462,12 @@ function loadConfigToUI() {
     if (elements.bulletMinLength) {
         elements.bulletMinLength.value = CONFIG.BULLET.MIN_LENGTH || 4;
     }
+    if (elements.bulletMaxLength) {
+        elements.bulletMaxLength.value = CONFIG.BULLET.MAX_LENGTH || 15;
+    }
+    if (elements.bulletMinInterval) {
+        elements.bulletMinInterval.value = CONFIG.BULLET.MIN_INTERVAL || 1000;
+    }
     elements.criticalRate.value = Math.round(CONFIG.BULLET.CRITICAL_RATE * 100);
     elements.criticalMultiplier.value = CONFIG.BULLET.CRITICAL_MULTIPLIER;
     
@@ -1465,6 +1493,7 @@ function applyConfig() {
     CONFIG.BULLET.BASE_DAMAGE = parseInt(elements.bulletDamage.value);
     CONFIG.BULLET.SPEED = parseFloat(elements.bulletSpeed.value);
     CONFIG.BULLET.MIN_LENGTH = parseInt(elements.bulletMinLength.value) || 4;
+    CONFIG.BULLET.MAX_LENGTH = parseInt(elements.bulletMaxLength?.value || 15) || 15;
     CONFIG.BULLET.MIN_INTERVAL = parseInt(elements.bulletMinInterval.value) || 1000;
     CONFIG.BULLET.CRITICAL_RATE = parseFloat(elements.criticalRate.value) / 100;
     CONFIG.BULLET.CRITICAL_MULTIPLIER = parseFloat(elements.criticalMultiplier.value);
@@ -1549,6 +1578,9 @@ elements.resetConfigBtn.addEventListener('click', async () => {
         CONFIG.BULLET.SPEED = defaultConfig.BULLET.SPEED;
         CONFIG.BULLET.HEIGHT = defaultConfig.BULLET.HEIGHT;
         CONFIG.BULLET.BASE_DAMAGE = defaultConfig.BULLET.BASE_DAMAGE;
+        CONFIG.BULLET.MIN_LENGTH = defaultConfig.BULLET.MIN_LENGTH || 4;
+        CONFIG.BULLET.MAX_LENGTH = defaultConfig.BULLET.MAX_LENGTH || 15;
+        CONFIG.BULLET.MIN_INTERVAL = defaultConfig.BULLET.MIN_INTERVAL || 1000;
         CONFIG.BULLET.CRITICAL_RATE = defaultConfig.BULLET.CRITICAL_RATE;
         CONFIG.BULLET.CRITICAL_MULTIPLIER = defaultConfig.BULLET.CRITICAL_MULTIPLIER;
         

@@ -687,6 +687,13 @@
                 return;
             }
 
+            // 检查弹幕最大长度（默认15个字）
+            const maxLength = 15;
+            if (text.length > maxLength) {
+                alert(`弹幕内容不能超过 ${maxLength} 个字，当前 ${text.length} 个字！`);
+                return;
+            }
+
             if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN) {
                 alert('请先连接到服务器！');
                 return;
