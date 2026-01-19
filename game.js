@@ -1022,24 +1022,43 @@ function draw() {
     // 绘制伤害数字（在最上层）
     drawDamageNumbers();
     
-    // 更新血量显示
-    updateHPDisplay();
+    // 注意：血量显示现在在Canvas上绘制，不再需要updateHPDisplay
+    // updateHPDisplay(); // 已移除，改为在drawBoss中绘制
 }
 
 // 绘制背景
 function drawBackground() {
-    ctx.fillStyle = '#1a1a2e';
+    // 使用渐变背景
+    const gradient = ctx.createLinearGradient(0, 0, elements.gameCanvas.width, elements.gameCanvas.height);
+    gradient.addColorStop(0, '#0f172a');
+    gradient.addColorStop(0.5, '#1e293b');
+    gradient.addColorStop(1, '#334155');
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, elements.gameCanvas.width, elements.gameCanvas.height);
     
-    // 绘制网格线
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    // 绘制星空效果（可选）
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    for (let i = 0; i < 50; i++) {
+        const x = (i * 137.5) % elements.gameCanvas.width;
+        const y = (i * 197.3) % elements.gameCanvas.height;
+        ctx.beginPath();
+        ctx.arc(x, y, 1, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    // 绘制网格线（可选，增加视觉层次）
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
     ctx.lineWidth = 1;
+    
+    // 垂直线
     for (let x = 0; x < elements.gameCanvas.width; x += 50) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, elements.gameCanvas.height);
         ctx.stroke();
     }
+    
+    // 水平线
     for (let y = 0; y < elements.gameCanvas.height; y += 50) {
         ctx.beginPath();
         ctx.moveTo(0, y);
@@ -1123,11 +1142,46 @@ function drawBoss() {
         drawBossPlaceholder();
     }
     
-    // BOSS文字（始终显示）
+    // 绘制BOSS血量条（在BOSS上方）
+    drawBossHPBar(boss.x, boss.y - size / 2 - 50);
+    
+    // BOSS文字（可选，如果不需要可以注释掉）
+    // ctx.fillStyle = '#fff';
+    // ctx.font = 'bold 32px Arial';
+    // ctx.textAlign = 'center';
+    // ctx.fillText('BOSS', boss.x, boss.y + size / 2 + 30);
+}
+
+// 绘制BOSS血量条（在Canvas上，跟随BOSS位置）
+function drawBossHPBar(bossX, bossY) {
+    const boss = gameState.boss;
+    const hpPercent = boss.hp / boss.maxHp;
+    const barWidth = 200;
+    const barHeight = 25;
+    const x = bossX - barWidth / 2;
+    const y = bossY - 20;
+    
+    // 绘制背景框
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(x - 5, y - 5, barWidth + 10, barHeight + 20);
+    
+    // 绘制血量条背景
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.fillRect(x, y, barWidth, barHeight);
+    
+    // 绘制血量条
+    const hpWidth = barWidth * hpPercent;
+    const gradient = ctx.createLinearGradient(x, y, x + hpWidth, y);
+    gradient.addColorStop(0, '#ff6b6b');
+    gradient.addColorStop(1, '#ee5a6f');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(x, y, hpWidth, barHeight);
+    
+    // 绘制血量文字
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 32px Arial';
+    ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('BOSS', boss.x, boss.y + size / 2 + 30);
+    ctx.fillText(`BOSS血量: ${Math.floor(boss.hp)} / ${boss.maxHp}`, bossX, y - 8);
 }
 
 // 绘制默认BOSS占位符
