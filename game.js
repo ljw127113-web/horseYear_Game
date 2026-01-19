@@ -1322,6 +1322,19 @@ elements.playAgain.addEventListener('click', async () => {
     
     // 更新血量显示
     updateHPDisplay();
+    
+    // 发送游戏重置消息到服务器（清空用户名库）
+    if (wsConnected && ws && ws.readyState === WebSocket.OPEN) {
+        try {
+            ws.send(JSON.stringify({
+                type: 'gameReset',
+                timestamp: Date.now()
+            }));
+            console.log('📤 已发送游戏重置消息到服务器');
+        } catch (error) {
+            console.error('发送游戏重置消息失败:', error);
+        }
+    }
 });
 
 // ============ 配置面板相关功能 ============

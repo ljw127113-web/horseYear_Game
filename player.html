@@ -222,7 +222,10 @@
             <div class="connection-info">
                 <strong>服务器地址：</strong>
                 <input type="text" id="serverUrl" style="width: 100%; margin-top: 5px; padding: 8px;" placeholder="wss://your-server.railway.app">
-                <button class="btn" id="connectBtn" style="width: 100%; margin-top: 10px;">连接服务器</button>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button class="btn" id="connectBtn" style="flex: 1;">连接服务器</button>
+                    <button class="btn" id="reconnectBtn" style="flex: 1; background: #28a745; color: white;">重新连接</button>
+                </div>
             </div>
         </div>
     </div>

@@ -231,10 +231,12 @@ wss.on('connection', (ws, req) => {
                     break;
                     
                 case 'gameReset':
-                    // 游戏重置
+                    // 游戏重置 - 清空用户名库，让所有玩家可以重新使用用户名
                     gameState = null;
+                    const clearedUsernamesCount = registeredUsernames.size;
+                    registeredUsernames.clear(); // 清空所有用户名注册
+                    console.log(`🔄 游戏已重置，清空了 ${clearedUsernamesCount} 个用户名注册`);
                     broadcast(data, ws);
-                    console.log('🔄 游戏已重置');
                     break;
                     
                 case 'ping':
