@@ -267,6 +267,14 @@ wss.on('connection', (ws, req) => {
                         console.error('❌ 发送心跳响应失败:', error);
                     }
                     break;
+                
+                case 'configUpdate':
+                    // 主游戏端同步配置（目前主要是弹幕最短发送间隔），简单转发给其他客户端
+                    console.log('🛠️ 收到配置更新:', {
+                        bulletMinInterval: data.bulletMinInterval
+                    });
+                    broadcast(data, ws);
+                    break;
                     
                 default:
                     console.log(`⚠️ 未知消息类型: ${data.type}`);

@@ -250,6 +250,7 @@
     </style>
 </head>
 <body>
+    <div class="new-year-title">LarkGames - 年会活动</div>
     <div class="player-container">
         <h1>🎮 弹幕BOSS战 - 玩家端</h1>
         
@@ -306,6 +307,8 @@
         let ws = null;
         let isConnected = false;
         const STORAGE_KEY = 'player_profile_v1';
+        // 从主游戏端同步过来的弹幕最短发送间隔（毫秒），默认与主游戏配置一致：3秒
+        let bulletMinIntervalFromServer = 3000;
         // playerId 用于唯一标识终端，避免重名误判
         function generatePlayerId() {
             if (crypto.randomUUID) return crypto.randomUUID();
@@ -619,6 +622,15 @@
                              const data = JSON.parse(event.data);
                              console.log('收到消息:', data);
                              
+                             // 主游戏端同步配置（目前主要是弹幕最短发送间隔）
+                             if (data.type === 'configUpdate') {
+                                 if (typeof data.bulletMinInterval === 'number' && data.bulletMinInterval > 0) {
+                                     bulletMinIntervalFromServer = data.bulletMinInterval;
+                                     console.log('🔁 已从主游戏端同步最短发送间隔:', bulletMinIntervalFromServer, 'ms');
+                                 }
+                                 return;
+                             }
+                             
                              // 处理用户名错误（重复或为空）
                              if (data.type === 'usernameError') {
                                  console.error('❌ 用户名错误:', data.message);
@@ -799,8 +811,8 @@
                 updateUserDisplay();
             }
             
-            // 检查弹幕发送间隔（默认1秒，与主游戏端保持一致）
-            const minInterval = 1000; // 玩家端使用固定值，主游戏端可在设置中配置
+            // 检查弹幕发送间隔：优先使用主游戏端同步过来的设置，默认3秒
+            const minInterval = bulletMinIntervalFromServer || 3000;
             const currentTime = Date.now();
             const timeSinceLastSend = currentTime - lastBulletSendTime;
             

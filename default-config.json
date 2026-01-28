@@ -20,7 +20,7 @@
     "CRITICAL_MULTIPLIER": 5,
     "MIN_LENGTH": 4,
     "MAX_LENGTH": 15,
-    "MIN_INTERVAL": 1000
+    "MIN_INTERVAL": 3000
   },
   "GAME": {
     "FPS": 60

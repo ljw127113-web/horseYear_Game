@@ -17,7 +17,7 @@ const DEFAULT_CONFIG = {
         CRITICAL_MULTIPLIER: 5, // 从default-config.json同步
         MIN_LENGTH: 4,          // 从default-config.json同步（最小长度，单位：汉字）
         MAX_LENGTH: 15,         // 从default-config.json同步（最大长度，单位：字符）
-        MIN_INTERVAL: 1000      // 从default-config.json同步（最短间隔，单位：毫秒）
+        MIN_INTERVAL: 3000      // 从default-config.json同步（最短间隔，单位：毫秒）
     },
     GAME: {
         FPS: 60
@@ -36,6 +36,22 @@ let heartbeatTimer = null; // 心跳定时器
 const HEARTBEAT_INTERVAL = 30000; // 心跳间隔30秒（延长连接时间）
 const CONNECTION_TIMEOUT = 120000; // 连接超时时间2分钟（可延长）
 let lastBulletSendTime = 0; // 上次发送弹幕的时间
+
+// 将当前配置同步给玩家端（主要是弹幕最短发送间隔等）
+function syncConfigToPlayers() {
+    if (wsConnected && ws && ws.readyState === WebSocket.OPEN) {
+        try {
+            const payload = {
+                type: 'configUpdate',
+                bulletMinInterval: CONFIG.BULLET.MIN_INTERVAL || 3000
+            };
+            ws.send(JSON.stringify(payload));
+            console.log('📤 已把配置发送到服务器（供player端读取）:', payload);
+        } catch (error) {
+            console.error('发送配置同步消息失败:', error);
+        }
+    }
+}
 
 // WebSocket服务器地址配置
 // 优先级：URL参数 > 环境变量 > 默认值
@@ -92,6 +108,9 @@ async function loadDefaultConfigFromFile() {
         if (configData && configData.BOSS && configData.BULLET) {
             loadedDefaultConfig = configData;
             console.log('✅ 已从文件加载默认配置');
+            // 每次从文件加载成功后，同步一次配置给玩家端
+            CONFIG.BULLET.MIN_INTERVAL = loadedDefaultConfig.BULLET.MIN_INTERVAL || 3000;
+            syncConfigToPlayers();
             return true;
         } else {
             throw new Error('配置文件格式错误');
@@ -616,7 +635,7 @@ function sendBullet() {
     if (text === '' || gameState.isGameOver) return;
     
     // 检查弹幕发送间隔
-    const minInterval = CONFIG.BULLET.MIN_INTERVAL || 1000; // 默认1秒
+    const minInterval = CONFIG.BULLET.MIN_INTERVAL || 3000; // 默认3秒
     const currentTime = Date.now();
     const timeSinceLastSend = currentTime - lastBulletSendTime;
     
@@ -1404,7 +1423,7 @@ elements.playAgain.addEventListener('click', async () => {
     CONFIG.BULLET.BASE_DAMAGE = defaultConfig.BULLET.BASE_DAMAGE;
     CONFIG.BULLET.MIN_LENGTH = defaultConfig.BULLET.MIN_LENGTH || 4;
     CONFIG.BULLET.MAX_LENGTH = defaultConfig.BULLET.MAX_LENGTH || 15;
-    CONFIG.BULLET.MIN_INTERVAL = defaultConfig.BULLET.MIN_INTERVAL || 1000;
+    CONFIG.BULLET.MIN_INTERVAL = defaultConfig.BULLET.MIN_INTERVAL || 3000;
     CONFIG.BULLET.CRITICAL_RATE = defaultConfig.BULLET.CRITICAL_RATE;
     CONFIG.BULLET.CRITICAL_MULTIPLIER = defaultConfig.BULLET.CRITICAL_MULTIPLIER;
     
@@ -1433,6 +1452,9 @@ elements.playAgain.addEventListener('click', async () => {
     
     // 更新血量显示
     updateHPDisplay();
+    
+    // 重置后也同步一次配置给玩家端
+    syncConfigToPlayers();
     
     // 发送游戏重置消息到服务器（清空用户名库）
     if (wsConnected && ws && ws.readyState === WebSocket.OPEN) {
@@ -1463,7 +1485,7 @@ function loadConfigToUI() {
         elements.bulletMaxLength.value = CONFIG.BULLET.MAX_LENGTH || 15;
     }
     if (elements.bulletMinInterval) {
-        elements.bulletMinInterval.value = CONFIG.BULLET.MIN_INTERVAL || 1000;
+        elements.bulletMinInterval.value = CONFIG.BULLET.MIN_INTERVAL || 3000;
     }
     elements.criticalRate.value = Math.round(CONFIG.BULLET.CRITICAL_RATE * 100);
     elements.criticalMultiplier.value = CONFIG.BULLET.CRITICAL_MULTIPLIER;
@@ -1491,7 +1513,7 @@ function applyConfig() {
     CONFIG.BULLET.SPEED = parseFloat(elements.bulletSpeed.value);
     CONFIG.BULLET.MIN_LENGTH = parseInt(elements.bulletMinLength.value) || 4;
     CONFIG.BULLET.MAX_LENGTH = parseInt(elements.bulletMaxLength?.value || 15) || 15;
-    CONFIG.BULLET.MIN_INTERVAL = parseInt(elements.bulletMinInterval.value) || 1000;
+    CONFIG.BULLET.MIN_INTERVAL = parseInt(elements.bulletMinInterval.value) || 3000;
     CONFIG.BULLET.CRITICAL_RATE = parseFloat(elements.criticalRate.value) / 100;
     CONFIG.BULLET.CRITICAL_MULTIPLIER = parseFloat(elements.criticalMultiplier.value);
     
@@ -1502,6 +1524,9 @@ function applyConfig() {
         gameState.boss.maxHp = CONFIG.BOSS.MAX_HP;
         updateHPDisplay();
     }
+    
+    // 配置变更后，同步给玩家端
+    syncConfigToPlayers();
 }
 
 // 打开配置面板
@@ -1577,7 +1602,7 @@ elements.resetConfigBtn.addEventListener('click', async () => {
         CONFIG.BULLET.BASE_DAMAGE = defaultConfig.BULLET.BASE_DAMAGE;
         CONFIG.BULLET.MIN_LENGTH = defaultConfig.BULLET.MIN_LENGTH || 4;
         CONFIG.BULLET.MAX_LENGTH = defaultConfig.BULLET.MAX_LENGTH || 15;
-        CONFIG.BULLET.MIN_INTERVAL = defaultConfig.BULLET.MIN_INTERVAL || 1000;
+        CONFIG.BULLET.MIN_INTERVAL = defaultConfig.BULLET.MIN_INTERVAL || 3000;
         CONFIG.BULLET.CRITICAL_RATE = defaultConfig.BULLET.CRITICAL_RATE;
         CONFIG.BULLET.CRITICAL_MULTIPLIER = defaultConfig.BULLET.CRITICAL_MULTIPLIER;
         
@@ -1732,16 +1757,25 @@ if (elements.clearStatsBtn) {
         CONFIG.BULLET.SPEED = defaultConfig.BULLET.SPEED;
         CONFIG.BULLET.HEIGHT = defaultConfig.BULLET.HEIGHT;
         CONFIG.BULLET.BASE_DAMAGE = defaultConfig.BULLET.BASE_DAMAGE;
+        CONFIG.BULLET.MIN_LENGTH = defaultConfig.BULLET.MIN_LENGTH || 4;
+        CONFIG.BULLET.MAX_LENGTH = defaultConfig.BULLET.MAX_LENGTH || 15;
+        CONFIG.BULLET.MIN_INTERVAL = defaultConfig.BULLET.MIN_INTERVAL || 3000;
         CONFIG.BULLET.CRITICAL_RATE = defaultConfig.BULLET.CRITICAL_RATE;
         CONFIG.BULLET.CRITICAL_MULTIPLIER = defaultConfig.BULLET.CRITICAL_MULTIPLIER;
         
         // 立即更新UI中的默认值（如果配置面板可见）
         loadConfigToUI();
         
+        // 初次加载配置后，同步给玩家端
+        syncConfigToPlayers();
+        
         console.log('配置加载完成，已使用文件配置初始化:', CONFIG.BOSS.INITIAL_HP);
     } else {
         // 使用内置默认配置时也要更新UI
         loadConfigToUI();
+        
+        // 使用内置默认配置时，同样同步一次给玩家端
+        syncConfigToPlayers();
         console.log('配置加载完成，使用内置默认配置');
     }
 })();
