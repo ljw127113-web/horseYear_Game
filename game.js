@@ -133,6 +133,11 @@ function getDefaultConfig() {
 // 图片缓存
 const imageCache = new Map();
 
+// 游戏主界面背景图
+// 由于Git无法上传文件夹，这里直接使用项目根目录下的单个图片文件
+// 请将图片命名为：assetsboss-background.png，并放在与 index.html 同一目录
+const BACKGROUND_IMAGE_URL = 'assetsboss-background.png';
+
 // 加载图片
 function loadImage(url) {
     if (imageCache.has(url)) {
@@ -140,6 +145,12 @@ function loadImage(url) {
     }
     
     const img = new Image();
+    img.onload = () => {
+        console.log('✅ 图片加载成功:', url, '尺寸:', img.naturalWidth + 'x' + img.naturalHeight);
+    };
+    img.onerror = (err) => {
+        console.error('❌ 图片加载失败:', url, err);
+    };
     img.src = url;
     imageCache.set(url, img);
     return img;
@@ -1055,42 +1066,48 @@ function draw() {
 
 // 绘制背景
 function drawBackground() {
-    // 使用渐变背景
-    const gradient = ctx.createLinearGradient(0, 0, elements.gameCanvas.width, elements.gameCanvas.height);
-    gradient.addColorStop(0, '#0f172a');
-    gradient.addColorStop(0.5, '#1e293b');
-    gradient.addColorStop(1, '#334155');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, elements.gameCanvas.width, elements.gameCanvas.height);
-    
-    // 绘制星空效果（可选）
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    for (let i = 0; i < 50; i++) {
-        const x = (i * 137.5) % elements.gameCanvas.width;
-        const y = (i * 197.3) % elements.gameCanvas.height;
-        ctx.beginPath();
-        ctx.arc(x, y, 1, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    
-    // 绘制网格线（可选，增加视觉层次）
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-    ctx.lineWidth = 1;
-    
-    // 垂直线
-    for (let x = 0; x < elements.gameCanvas.width; x += 50) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, elements.gameCanvas.height);
-        ctx.stroke();
-    }
-    
-    // 水平线
-    for (let y = 0; y < elements.gameCanvas.height; y += 50) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(elements.gameCanvas.width, y);
-        ctx.stroke();
+    const width = elements.gameCanvas.width;
+    const height = elements.gameCanvas.height;
+
+    // 优先绘制用户提供的背景图
+    const bgImg = loadImage(BACKGROUND_IMAGE_URL);
+    if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
+        // 计算等比缩放，保证铺满画布
+        const imgRatio = bgImg.naturalWidth / bgImg.naturalHeight;
+        const canvasRatio = width / height;
+        let drawWidth, drawHeight, offsetX, offsetY;
+
+        if (canvasRatio > imgRatio) {
+            // 画布更宽，以宽为基准
+            drawWidth = width;
+            drawHeight = width / imgRatio;
+            offsetX = 0;
+            offsetY = (height - drawHeight) / 2;
+        } else {
+            // 画布更高，以高为基准
+            drawHeight = height;
+            drawWidth = height * imgRatio;
+            offsetX = (width - drawWidth) / 2;
+            offsetY = 0;
+        }
+
+        // 先绘制原图
+        ctx.drawImage(bgImg, offsetX, offsetY, drawWidth, drawHeight);
+
+        // 再叠一层半透明黑色，让BOSS和弹幕更突出
+        const darkGradient = ctx.createLinearGradient(0, 0, 0, height);
+        darkGradient.addColorStop(0, 'rgba(0, 0, 0, 0.55)');
+        darkGradient.addColorStop(1, 'rgba(0, 0, 0, 0.75)');
+        ctx.fillStyle = darkGradient;
+        ctx.fillRect(0, 0, width, height);
+    } else {
+        // 如果背景图尚未加载完成，退回到原来的蓝色渐变背景
+        const gradient = ctx.createLinearGradient(0, 0, width, height);
+        gradient.addColorStop(0, '#0f172a');
+        gradient.addColorStop(0.5, '#1e293b');
+        gradient.addColorStop(1, '#334155');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
     }
 }
 
