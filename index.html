@@ -64,18 +64,6 @@
             <div class="version-display" id="versionDisplay" title="游戏版本号">
                 v<span id="versionNumber">1.0.0.0</span>
             </div>
-            
-            <!-- 控制面板 -->
-            <div class="control-panel">
-                <div class="player-info">
-                    <img id="currentPlayerAvatar" src="" alt="头像" class="player-avatar-small">
-                    <span id="currentPlayerName">玩家</span>
-                </div>
-                <div class="input-section">
-                    <input type="text" id="bulletInput" placeholder="输入弹幕内容..." maxlength="50">
-                    <button id="sendBullet" class="btn btn-send">发送弹幕</button>
-                </div>
-            </div>
 
             <!-- BOSS信息显示 -->
             <div class="boss-info">
@@ -133,9 +121,9 @@
                             <input type="number" id="bossSpeed" min="0.1" max="5" step="0.1">
                         </div>
                         <div class="config-item">
-                            <label>BOSS尺寸大小：</label>
-                            <input type="number" id="bossSize" min="100" max="600" step="10">
-                            <small style="display: block; color: #666; margin-top: 5px;">BOSS 圆形直径（像素），影响显示与碰撞范围</small>
+                            <label>BOSS尺寸比例：</label>
+                            <input type="number" id="bossSize" min="0.3" max="2" step="0.1" placeholder="1.0">
+                            <small style="display: block; color: #666; margin-top: 5px;">相对默认大小的比例，如 0.8 为 80%、1.2 为 120%</small>
                         </div>
                     </div>
                     <div class="config-section">
