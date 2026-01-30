@@ -1,10 +1,14 @@
 // 默认游戏配置（从default-config.json同步，可直接修改这里）
 // 注意：修改default-config.json后需要同步更新这里的值
+// BOSS 默认尺寸（像素），尺寸比例基于此计算
+const DEFAULT_BOSS_BASE_SIZE = 350;
+
 const DEFAULT_CONFIG = {
     BOSS: {
         INITIAL_HP: 500,        // 从default-config.json同步
         MAX_HP: 500,            // 从default-config.json同步
-        SIZE: 350,              // 从default-config.json同步
+        SIZE: 350,              // 实际尺寸 = DEFAULT_BOSS_BASE_SIZE * SIZE_SCALE
+        SIZE_SCALE: 1.0,        // 尺寸比例，如 0.8、1.2
         MOVE_SPEED: 0.6,        // 从default-config.json同步
         MOVE_RANGE: { minX: 100, maxX: 900, minY: 150, maxY: 400 },
         IMAGE_URL: null
@@ -315,6 +319,7 @@ const elements = {
     uploadBossImageBtn: document.getElementById('uploadBossImageBtn'),
     bossHP: document.getElementById('bossHP'),
     bossSpeed: document.getElementById('bossSpeed'),
+    bossSize: document.getElementById('bossSize'),
     bulletDamage: document.getElementById('bulletDamage'),
     bulletSpeed: document.getElementById('bulletSpeed'),
     bulletMinLength: document.getElementById('bulletMinLength'),
@@ -589,52 +594,39 @@ if (elements.disconnectBtn) {
     });
 }
 
-elements.confirmSetup.addEventListener('click', () => {
-    // 生成默认玩家信息（主游戏端不需要玩家信息，只观看）
-    gameState.player.name = '观众';
-    gameState.player.avatarUrl = '';
-    gameState.player.avatar = '';
-    
-    // 设置显示信息
-    elements.currentPlayerAvatar.src = '';
-    elements.currentPlayerAvatar.style.display = 'none';
-    elements.currentPlayerName.textContent = '观众模式';
-    
-    elements.playerSetup.style.display = 'none';
-    elements.gameArea.style.display = 'block';
-    
-    initCanvas();
-    startGame();
-    
-    // 连接WebSocket服务器（延迟连接，确保游戏已初始化）
-    setTimeout(() => {
-        connectWebSocket();
-    }, 500);
-});
+if (elements.confirmSetup) {
+    elements.confirmSetup.addEventListener('click', () => {
+        // 生成默认玩家信息（主游戏端不需要玩家信息，只观看）
+        gameState.player.name = '观众';
+        gameState.player.avatarUrl = '';
+        gameState.player.avatar = '';
+        
+        // 设置显示信息（主界面已移除控制面板时无此元素）
+        if (elements.currentPlayerAvatar) {
+            elements.currentPlayerAvatar.src = '';
+            elements.currentPlayerAvatar.style.display = 'none';
+        }
+        if (elements.currentPlayerName) elements.currentPlayerName.textContent = '观众模式';
+        
+        if (elements.playerSetup) elements.playerSetup.style.display = 'none';
+        if (elements.gameArea) elements.gameArea.style.display = 'block';
+        
+        initCanvas();
+        startGame();
+        
+        // 连接WebSocket服务器（延迟连接，确保游戏已初始化）
+        setTimeout(() => connectWebSocket(), 500);
+    });
+}
 
-// 发送弹幕（移动端优化）
-elements.sendBullet.addEventListener('click', () => {
-    sendBullet();
-    // 移动端输入框优化：点击发送按钮后自动聚焦到输入框
-    setTimeout(() => {
-        elements.bulletInput.focus();
-    }, 100);
-});
-
-// 移动端触摸支持
-elements.sendBullet.addEventListener('touchend', (e) => {
-    e.preventDefault();
-    sendBullet();
-    setTimeout(() => {
-        elements.bulletInput.focus();
-    }, 100);
-});
-
-elements.bulletInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        sendBullet();
-    }
-});
+// 主游戏界面已去掉弹幕输入，仅玩家端可发送弹幕；若存在发送按钮则绑定事件（兼容旧 DOM）
+if (elements.sendBullet) {
+    elements.sendBullet.addEventListener('click', () => sendBullet());
+    elements.sendBullet.addEventListener('touchend', (e) => { e.preventDefault(); sendBullet(); });
+}
+if (elements.bulletInput) {
+    elements.bulletInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendBullet(); });
+}
 
 // 计算字符串长度（按字符数，兼容表情符号）
 function getCharLength(str) {
@@ -642,6 +634,8 @@ function getCharLength(str) {
 }
 
 function sendBullet() {
+    // 主游戏界面已移除弹幕输入，仅观看；弹幕由玩家端发送
+    if (!elements.bulletInput) return;
     const text = elements.bulletInput.value.trim();
     if (text === '' || gameState.isGameOver) return;
     
@@ -701,7 +695,7 @@ function sendBullet() {
         }));
     }
     
-    elements.bulletInput.value = '';
+    if (elements.bulletInput) elements.bulletInput.value = '';
 }
 
 // 接收其他玩家的弹幕
@@ -1431,7 +1425,8 @@ elements.playAgain.addEventListener('click', async () => {
     // 使用文件中的默认配置重置游戏配置
     CONFIG.BOSS.INITIAL_HP = defaultConfig.BOSS.INITIAL_HP;
     CONFIG.BOSS.MAX_HP = defaultConfig.BOSS.MAX_HP;
-    CONFIG.BOSS.SIZE = defaultConfig.BOSS.SIZE;
+    CONFIG.BOSS.SIZE_SCALE = defaultConfig.BOSS.SIZE_SCALE != null ? defaultConfig.BOSS.SIZE_SCALE : 1.0;
+    CONFIG.BOSS.SIZE = Math.round((defaultConfig.BOSS.SIZE || DEFAULT_BOSS_BASE_SIZE) * CONFIG.BOSS.SIZE_SCALE);
     CONFIG.BOSS.MOVE_SPEED = defaultConfig.BOSS.MOVE_SPEED;
     CONFIG.BOSS.MOVE_RANGE = defaultConfig.BOSS.MOVE_RANGE;
     
@@ -1493,6 +1488,10 @@ elements.playAgain.addEventListener('click', async () => {
 function loadConfigToUI() {
     elements.bossHP.value = CONFIG.BOSS.INITIAL_HP;
     elements.bossSpeed.value = CONFIG.BOSS.MOVE_SPEED;
+    const bossSizeInput = document.getElementById('bossSize');
+    if (bossSizeInput) {
+        bossSizeInput.value = CONFIG.BOSS.SIZE_SCALE != null ? CONFIG.BOSS.SIZE_SCALE : 1.0;
+    }
     elements.bulletDamage.value = CONFIG.BULLET.BASE_DAMAGE;
     elements.bulletSpeed.value = CONFIG.BULLET.SPEED;
     if (elements.bulletMinLength) {
@@ -1524,6 +1523,33 @@ function applyConfig() {
     CONFIG.BOSS.INITIAL_HP = parseInt(elements.bossHP.value);
     CONFIG.BOSS.MAX_HP = parseInt(elements.bossHP.value);
     CONFIG.BOSS.MOVE_SPEED = parseFloat(elements.bossSpeed.value);
+    
+    // BOSS 尺寸比例：保存时从 DOM 直接读取，实际尺寸 = 默认 350 * 比例
+    const bossSizeEl = document.getElementById('bossSize');
+    if (bossSizeEl && bossSizeEl.value !== '' && !isNaN(Number(bossSizeEl.value))) {
+        const scale = parseFloat(bossSizeEl.value);
+        const clamped = Math.max(0.3, Math.min(2, scale));
+        CONFIG.BOSS.SIZE_SCALE = clamped;
+        CONFIG.BOSS.SIZE = Math.round(DEFAULT_BOSS_BASE_SIZE * clamped);
+    }
+    
+    // 若游戏进行中，按新尺寸更新 BOSS 移动范围
+    if (elements.gameArea && elements.gameArea.style.display !== 'none' && elements.gameCanvas) {
+        const w = elements.gameCanvas.width;
+        const h = elements.gameCanvas.height;
+        const size = CONFIG.BOSS.SIZE;
+        const minY = Math.min(150, h * 0.15);
+        const maxY = Math.max(h - 200, h * 0.7);
+        CONFIG.BOSS.MOVE_RANGE = {
+            minX: size,
+            maxX: w - size,
+            minY: minY,
+            maxY: maxY
+        };
+        // 限制 BOSS 当前位置在新移动范围内，避免超出边界
+        gameState.boss.x = Math.max(size, Math.min(w - size, gameState.boss.x));
+        gameState.boss.y = Math.max(minY, Math.min(maxY, gameState.boss.y));
+    }
     
     // 更新弹幕配置
     CONFIG.BULLET.BASE_DAMAGE = parseInt(elements.bulletDamage.value);
@@ -1609,7 +1635,8 @@ elements.resetConfigBtn.addEventListener('click', async () => {
         
         CONFIG.BOSS.INITIAL_HP = defaultConfig.BOSS.INITIAL_HP;
         CONFIG.BOSS.MAX_HP = defaultConfig.BOSS.MAX_HP;
-        CONFIG.BOSS.SIZE = defaultConfig.BOSS.SIZE;
+        CONFIG.BOSS.SIZE_SCALE = defaultConfig.BOSS.SIZE_SCALE != null ? defaultConfig.BOSS.SIZE_SCALE : 1.0;
+        CONFIG.BOSS.SIZE = Math.round((defaultConfig.BOSS.SIZE || DEFAULT_BOSS_BASE_SIZE) * CONFIG.BOSS.SIZE_SCALE);
         CONFIG.BOSS.MOVE_SPEED = defaultConfig.BOSS.MOVE_SPEED;
         CONFIG.BOSS.MOVE_RANGE = defaultConfig.BOSS.MOVE_RANGE;
         CONFIG.BOSS.IMAGE_URL = defaultConfig.BOSS.IMAGE_URL || null;
@@ -1766,7 +1793,8 @@ if (elements.clearStatsBtn) {
         const defaultConfig = getDefaultConfig();
         CONFIG.BOSS.INITIAL_HP = defaultConfig.BOSS.INITIAL_HP;
         CONFIG.BOSS.MAX_HP = defaultConfig.BOSS.MAX_HP;
-        CONFIG.BOSS.SIZE = defaultConfig.BOSS.SIZE;
+        CONFIG.BOSS.SIZE_SCALE = defaultConfig.BOSS.SIZE_SCALE != null ? defaultConfig.BOSS.SIZE_SCALE : 1.0;
+        CONFIG.BOSS.SIZE = Math.round((defaultConfig.BOSS.SIZE || DEFAULT_BOSS_BASE_SIZE) * CONFIG.BOSS.SIZE_SCALE);
         CONFIG.BOSS.MOVE_SPEED = defaultConfig.BOSS.MOVE_SPEED;
         CONFIG.BOSS.MOVE_RANGE = defaultConfig.BOSS.MOVE_RANGE;
         CONFIG.BOSS.IMAGE_URL = defaultConfig.BOSS.IMAGE_URL || null;
@@ -1789,6 +1817,8 @@ if (elements.clearStatsBtn) {
         console.log('配置加载完成，已使用文件配置初始化:', CONFIG.BOSS.INITIAL_HP);
     } else {
         // 使用内置默认配置时也要更新UI
+        CONFIG.BOSS.SIZE_SCALE = CONFIG.BOSS.SIZE_SCALE != null ? CONFIG.BOSS.SIZE_SCALE : 1.0;
+        CONFIG.BOSS.SIZE = Math.round(DEFAULT_BOSS_BASE_SIZE * CONFIG.BOSS.SIZE_SCALE);
         loadConfigToUI();
         
         // 使用内置默认配置时，同样同步一次给玩家端
@@ -1924,15 +1954,6 @@ function connectWebSocket() {
         console.warn('游戏将在单机模式下运行');
     }
 }
-
-// 启动游戏时连接WebSocket（延迟连接，等待玩家设置完成）
-elements.confirmSetup.addEventListener('click', () => {
-    // 原有的设置代码...
-    // 然后连接WebSocket
-    setTimeout(() => {
-        connectWebSocket();
-    }, 500);
-}, { once: false });
 
 // 页面卸载时断开连接
 window.addEventListener('beforeunload', () => {
